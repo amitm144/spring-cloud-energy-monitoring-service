@@ -6,6 +6,7 @@ import il.ac.afeka.rsocketmessagingservice.repositories.MessageRepository;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import java.util.Date;
 
 @Service
 public class MessageServiceImpl implements MessagesService {
@@ -22,7 +23,12 @@ public class MessageServiceImpl implements MessagesService {
 
     @Override
     public Mono<MessageBoundary> create(MessageBoundary messageBoundary) {
-        return null;
+        messageBoundary.setMessageId(null);
+        messageBoundary.setPublishedTimestamp(new Date());
+
+        return Mono.just(messageBoundary.toEntity())
+                .flatMap(this.messageRepository::save)
+                .map(MessageBoundary::new);
     }
 
     @Override
