@@ -18,7 +18,9 @@ public class MessageServiceImpl implements MessagesService {
 
     @Override
     public Flux<MessageBoundary> getAll() {
-        return null;
+        return messageRepository
+                .findAll()
+                .map(MessageBoundary::new);
     }
 
     @Override
@@ -43,6 +45,7 @@ public class MessageServiceImpl implements MessagesService {
 
     @Override
     public Mono<Void> deleteAll() {
-        return null;
+        return this.messageRepository
+                .deleteAll();
     }
 }

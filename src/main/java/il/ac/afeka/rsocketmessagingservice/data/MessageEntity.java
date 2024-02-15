@@ -8,7 +8,7 @@ import java.util.Date;
 import java.util.Map;
 import java.util.Set;
 
-@Document(collation = "messages")
+@Document(collection = "messages")
 public class MessageEntity {
     @Id
     private String messageId;
@@ -17,7 +17,9 @@ public class MessageEntity {
     private Date publishedTimestamp;
     private Set<ExternalReference> externalReferences;
     private Map<String, Object> messageDetails;
+
     public MessageEntity()  {}
+
     public MessageEntity(String messageId, String messageType, String summary, Date publishedTimestamp,
                          Set<ExternalReference> externalReferences, Map<String, Object> messageDetails) {
         this.messageId = messageId;
