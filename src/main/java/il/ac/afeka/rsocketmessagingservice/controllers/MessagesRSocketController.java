@@ -35,12 +35,15 @@ public class MessagesRSocketController {
 
     @MessageMapping("${app.rsocket.get-by-ids:get-messages-by-ids}")
     public Flux<MessageBoundary> getMessagesByIDs(Flux<IdBoundary> ids) {
-        return null;
+        this.logger.debug("invoking: get-messages-by-ids");
+        return ids.flatMap(id->messagesService.getById(id.getMessageId()));
     }
+
 
     @MessageMapping("${app.rsocket.get-by-ext-ref:get-messages-by-external-references}")
     public Flux<MessageBoundary> getMessagesByReferences(Flux<ExternalReferenceBoundary> references) {
-        return null;
+        this.logger.debug("invoking: get-messages-by-ext-ref");
+        return messagesService.getByExternalReferences(references);
     }
 
     @MessageMapping("${app.rsocket.delete-all:delete-all-messages}")

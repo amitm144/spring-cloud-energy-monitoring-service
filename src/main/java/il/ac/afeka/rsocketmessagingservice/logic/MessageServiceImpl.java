@@ -18,7 +18,7 @@ public class MessageServiceImpl implements MessagesService {
 
     @Override
     public Flux<MessageBoundary> getAll() {
-        return messageRepository
+        return this.messageRepository
                 .findAll()
                 .map(MessageBoundary::new);
     }
@@ -34,13 +34,19 @@ public class MessageServiceImpl implements MessagesService {
     }
 
     @Override
-    public Flux<MessageBoundary> getById(String messageId) {
-        return null;
+    public Mono<MessageBoundary> getById(String messageId) {
+        return this.messageRepository
+                .findById(messageId)
+                .map(MessageBoundary::new);
     }
 
     @Override
-    public Flux<MessageBoundary> getByExternalReference(ExternalReferenceBoundary reference) {
-        return null;
+    public Flux<MessageBoundary> getByExternalReferences(Flux<ExternalReferenceBoundary> externalReferences) {
+        return externalReferences
+                .map(ExternalReferenceBoundary::toEntity)
+                .collectList()
+                .flatMapMany(this.messageRepository::findAllByExternalReferencesIn)
+                .map(MessageBoundary::new);
     }
 
     @Override

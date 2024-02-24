@@ -1,5 +1,6 @@
 package il.ac.afeka.rsocketmessagingservice.controllers;
 
+import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.IdBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import jakarta.annotation.PostConstruct;
@@ -10,6 +11,7 @@ import org.springframework.messaging.rsocket.RSocketRequester;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import java.util.List;
 
 @RestController
 @RequestMapping(path = "/messages")
@@ -70,12 +72,11 @@ public class MessagesClientController {
 
     @GetMapping(
             path= {"/byIds/{ids}"},
-            produces = {MediaType.TEXT_EVENT_STREAM_VALUE}
-    )
+            produces = {MediaType.TEXT_EVENT_STREAM_VALUE})
     public Flux<MessageBoundary> getMessagesByIDs(@PathVariable String ids) {
         Flux<IdBoundary> idFlux = Flux
                 .fromArray(ids.split(","))
-                .map(id -> new IdBoundary(id));
+                .map(IdBoundary::new);
 
         return this.requester
                 .route(GET_MESSAGES_BY_ID_ROUTE)
@@ -83,12 +84,16 @@ public class MessagesClientController {
                 .retrieveFlux(MessageBoundary.class);
     }
 
-    // TODO
-    public Flux<MessageBoundary> getMessagesByExternalReferences() {
+    @PostMapping(
+            path= {"/byReferences"},
+            consumes = {MediaType.APPLICATION_JSON_VALUE},
+            produces = {MediaType.TEXT_EVENT_STREAM_VALUE})
+    public Flux<MessageBoundary> getMessagesByExternalReferences
+            (@RequestBody List<ExternalReferenceBoundary> references) {
 
         return this.requester
                 .route(GET_MESSAGES_BY_EXT_REF_ROUTE)
-//                .data()
+                .data(Flux.fromIterable(references))
                 .retrieveFlux(MessageBoundary.class);
     }
 

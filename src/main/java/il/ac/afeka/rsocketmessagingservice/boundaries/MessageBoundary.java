@@ -1,17 +1,17 @@
 package il.ac.afeka.rsocketmessagingservice.boundaries;
 
-import il.ac.afeka.rsocketmessagingservice.data.ExternalReference;
 import il.ac.afeka.rsocketmessagingservice.data.MessageEntity;
 import java.util.Date;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class MessageBoundary {
     private String messageId;
     private String summary;
     private String messageType;
     private Date publishedTimestamp;
-    private Set<ExternalReference> externalReferences;
+    private Set<ExternalReferenceBoundary> externalReferences;
     private Map<String, Object> messageDetails;
 
     public MessageBoundary() {}
@@ -20,21 +20,27 @@ public class MessageBoundary {
         this.setMessageId(entity.getMessageId());
         this.setMessageType(entity.getMessageType());
         this.setSummary(entity.getSummary());
-        this.setMessageType(messageType);
+        this.setMessageType(entity.getMessageType());
         this.setPublishedTimestamp(entity.getPublishedTimestamp());
-        this.setExternalReferences(entity.getExternalReferences());
+        this.setExternalReferences(entity.getExternalReferences()
+                                    .stream()
+                                    .map(ExternalReferenceBoundary::new)
+                                    .collect(Collectors.toSet()));
         this.setMessageDetails(entity.getMessageDetails());
     }
 
     // Convert this boundary to a MessageEntity object
     public MessageEntity toEntity() {
         MessageEntity rv = new MessageEntity();
-        rv.setMessageId(this.messageId);
-        rv.setMessageType(this.messageType);
-        rv.setSummary(this.summary);
-        rv.setPublishedTimestamp(this.publishedTimestamp);
-        rv.setExternalReferences(this.externalReferences);
-        rv.setMessageDetails(this.messageDetails);
+        rv.setMessageId(this.getMessageId());
+        rv.setMessageType(this.getMessageType());
+        rv.setSummary(this.getSummary());
+        rv.setPublishedTimestamp(this.getPublishedTimestamp());
+        rv.setExternalReferences(this.getExternalReferences()
+                                     .stream()
+                                     .map(ExternalReferenceBoundary::toEntity)
+                                     .collect(Collectors.toSet()));
+        rv.setMessageDetails(this.getMessageDetails());
         return rv;
     }
 
@@ -71,11 +77,11 @@ public class MessageBoundary {
         this.publishedTimestamp = publishedTimestamp;
     }
 
-    public Set<ExternalReference> getExternalReferences() {
+    public Set<ExternalReferenceBoundary> getExternalReferences() {
         return externalReferences;
     }
 
-    public void setExternalReferences(Set<ExternalReference> externalReferences) {
+    public void setExternalReferences(Set<ExternalReferenceBoundary> externalReferences) {
         this.externalReferences = externalReferences;
     }
 

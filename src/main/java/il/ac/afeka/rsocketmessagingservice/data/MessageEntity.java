@@ -1,9 +1,7 @@
 package il.ac.afeka.rsocketmessagingservice.data;
 
-
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-
 import java.util.Date;
 import java.util.Map;
 import java.util.Set;
@@ -15,13 +13,13 @@ public class MessageEntity {
     private String messageType;
     private String summary;
     private Date publishedTimestamp;
-    private Set<ExternalReference> externalReferences;
+    private Set<ExternalReferenceEntity> externalReferences;
     private Map<String, Object> messageDetails;
 
     public MessageEntity()  {}
 
     public MessageEntity(String messageId, String messageType, String summary, Date publishedTimestamp,
-                         Set<ExternalReference> externalReferences, Map<String, Object> messageDetails) {
+                         Set<ExternalReferenceEntity> externalReferences, Map<String, Object> messageDetails) {
         this.messageId = messageId;
         this.messageType = messageType;
         this.summary = summary;
@@ -46,7 +44,7 @@ public class MessageEntity {
         return publishedTimestamp;
     }
 
-    public Set<ExternalReference> getExternalReferences() {
+    public Set<ExternalReferenceEntity> getExternalReferences() {
         return externalReferences;
     }
 
@@ -70,7 +68,7 @@ public class MessageEntity {
         this.publishedTimestamp = publishedTimestamp;
     }
 
-    public void setExternalReferences(Set<ExternalReference> externalReferences) {
+    public void setExternalReferences(Set<ExternalReferenceEntity> externalReferences) {
         this.externalReferences = externalReferences;
     }
 
