@@ -25,7 +25,7 @@ public class MessagesClientController {
     private String PUBLISH_MESSAGE_ROUTE;
     @Value("${app.rsocket.get-all:get-all-messages}")
     private String GET_ALL_MESSAGES_ROUTE;
-    @Value("${app.rsocket.get-by-ids:get-messages-by-ids}")
+    @Value("${overcurrent-warning-events}")
     private String GET_MESSAGES_BY_ID_ROUTE;
     @Value("${app.rsocket.get-by-ext-ref:get-messages-by-external-references}")
     private String GET_MESSAGES_BY_EXT_REF_ROUTE;

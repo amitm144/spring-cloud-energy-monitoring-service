@@ -1,9 +1,8 @@
 package il.ac.afeka.rsocketmessagingservice.controllers;
 
 import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
-import il.ac.afeka.rsocketmessagingservice.boundaries.IdBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
-import il.ac.afeka.rsocketmessagingservice.logic.MessagesService;
+import il.ac.afeka.rsocketmessagingservice.logic.EnergyConsumptionsService;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,40 +14,30 @@ import reactor.core.publisher.Mono;
 
 @Controller
 public class MessagesRSocketController {
-    private MessagesService messagesService;
+    private EnergyConsumptionsService messagesService;
     private Log logger = LogFactory.getLog(MessagesRSocketController.class);
 
     @Autowired
-    public void setMessagesService(MessagesService messagesService) { this.messagesService = messagesService; }
+    public void setMessagesService(EnergyConsumptionsService messagesService) { this.messagesService = messagesService; }
 
-    @MessageMapping("${app.rsocket.get-all:get-all-messages}")
-    public Flux<MessageBoundary> getAllMessages() {
-        this.logger.debug("invoking: get-all-messages");
-        return messagesService.getAll();
+    @MessageMapping("${newHouseEvent}")
+    public Mono<MessageBoundary> createNewHouse(@Payload MessageBoundary message) {
+        this.logger.debug("invoking: newHouseEvent");
+        return messagesService.createNewHouse(message);
     }
-
-    @MessageMapping("${app.rsocket.publish:publish-message}")
-    public Mono<MessageBoundary> createMessage(@Payload MessageBoundary message) {
-        this.logger.debug("invoking: publish-message");
-        return messagesService.create(message);
+    @MessageMapping("${device-event}")
+    public Mono<Void> HandleDeviceEvent(@Payload MessageBoundary message) {
+        this.logger.debug("invoking: newHouseEvent");
+        return messagesService.HandleDeviceEvent(message);
     }
-
-    @MessageMapping("${app.rsocket.get-by-ids:get-messages-by-ids}")
-    public Flux<MessageBoundary> getMessagesByIDs(Flux<IdBoundary> ids) {
-        this.logger.debug("invoking: get-messages-by-ids");
-        return ids.flatMap(id->messagesService.getById(id.getMessageId()));
+    @MessageMapping("${live--consumption}")
+    public Flux<MessageBoundary> GetCurrentConsumptionSummery(Flux<MessageBoundary> messages) {
+        this.logger.debug("invoking: live--consumption");
+        return messagesService.GetCurrentConsumptionSummery(messages);
     }
-
-
-    @MessageMapping("${app.rsocket.get-by-ext-ref:get-messages-by-external-references}")
-    public Flux<MessageBoundary> getMessagesByReferences(Flux<ExternalReferenceBoundary> references) {
-        this.logger.debug("invoking: get-messages-by-ext-ref");
-        return messagesService.getByExternalReferences(references);
-    }
-
-    @MessageMapping("${app.rsocket.delete-all:delete-all-messages}")
-    public Mono<Void> deleteAllMessages() {
-        this.logger.debug("invoking: delete-all-messages");
-        return messagesService.deleteAll();
+    @MessageMapping("${consumption-summary-event}")
+    public Flux<MessageBoundary> GetConsumptionSummery(Flux<MessageBoundary> messages) {
+        this.logger.debug("invoking: consumption-summary-event");
+        return messagesService.GetConsumptionSummery(messages);
     }
 }
