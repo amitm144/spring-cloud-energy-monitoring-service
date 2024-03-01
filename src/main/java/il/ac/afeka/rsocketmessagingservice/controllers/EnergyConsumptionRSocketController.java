@@ -1,6 +1,5 @@
 package il.ac.afeka.rsocketmessagingservice.controllers;
 
-import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import il.ac.afeka.rsocketmessagingservice.logic.EnergyConsumptionsService;
 import org.apache.commons.logging.Log;
@@ -13,14 +12,14 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Controller
-public class MessagesRSocketController {
+public class EnergyConsumptionRSocketController {
     private EnergyConsumptionsService messagesService;
-    private Log logger = LogFactory.getLog(MessagesRSocketController.class);
+    private Log logger = LogFactory.getLog(EnergyConsumptionRSocketController.class);
 
     @Autowired
     public void setMessagesService(EnergyConsumptionsService messagesService) { this.messagesService = messagesService; }
 
-    @MessageMapping("${newHouseEvent}")
+    @MessageMapping("${new-house-event}")
     public Mono<MessageBoundary> createNewHouse(@Payload MessageBoundary message) {
         this.logger.debug("invoking: newHouseEvent");
         return messagesService.createNewHouse(message);
@@ -30,7 +29,7 @@ public class MessagesRSocketController {
         this.logger.debug("invoking: newHouseEvent");
         return messagesService.HandleDeviceEvent(message);
     }
-    @MessageMapping("${live--consumption}")
+    @MessageMapping("${live-consumption}")
     public Flux<MessageBoundary> GetCurrentConsumptionSummery(Flux<MessageBoundary> messages) {
         this.logger.debug("invoking: live--consumption");
         return messagesService.GetCurrentConsumptionSummery(messages);

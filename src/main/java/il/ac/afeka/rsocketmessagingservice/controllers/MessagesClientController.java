@@ -1,17 +1,16 @@
 package il.ac.afeka.rsocketmessagingservice.controllers;
 
 import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
-import il.ac.afeka.rsocketmessagingservice.boundaries.IdBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.messaging.rsocket.RSocketRequester;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import java.util.List;
+
+import java.util.*;
 
 @RestController
 @RequestMapping(path = "/messages")
@@ -21,17 +20,18 @@ public class MessagesClientController {
     private String socketHost;
     private int socketPort;
 
-    @Value("${app.rsocket.publish:publish-message}")
-    private String PUBLISH_MESSAGE_ROUTE;
-    @Value("${app.rsocket.get-all:get-all-messages}")
-    private String GET_ALL_MESSAGES_ROUTE;
-    @Value("${overcurrent-warning-events}")
-    private String GET_MESSAGES_BY_ID_ROUTE;
-    @Value("${app.rsocket.get-by-ext-ref:get-messages-by-external-references}")
-    private String GET_MESSAGES_BY_EXT_REF_ROUTE;
-    @Value("${app.rsocket.delete-all:delete-all-messages}")
-    private String DELETE_ALL_MESSAGES_ROUTE;
-
+    @Value("${overcurrent-warning-event}")
+    private String OVERCURRENT_WARNING_EVENT;
+    @Value("${consumption-warning-event}")
+    private String CONSUMPTION_WARNING_EVENT;
+    @Value("${new-house-event}")
+    private String newHouseEventRoute;
+    @Value("${device-event}")
+    private String deviceEventRoute;
+    @Value("${live-consumption}")
+    private String liveConsumptionRoute;
+    @Value("${consumption-summary-event}")
+    private String consumptionSummaryEventRoute;
 
     @Autowired
     public void setBuilder(RSocketRequester.Builder builder) {
@@ -53,54 +53,100 @@ public class MessagesClientController {
         this.requester = this.builder.tcp(socketHost, socketPort);
     }
 
-    @PostMapping(
-            consumes = {MediaType.APPLICATION_JSON_VALUE},
-            produces = {MediaType.APPLICATION_JSON_VALUE})
-    public Mono<MessageBoundary> publishMessage(@RequestBody MessageBoundary message) {
+    @GetMapping(path ="/over-current-warning")
+    public Flux<MessageBoundary> getOverCurrentWarningEvent() {
+        // demo - Warning
+        MessageBoundary warrning =generateOvercurrentWarning("0","Light bulb",5f);
         return this.requester
-                .route(PUBLISH_MESSAGE_ROUTE)
+                .route(OVERCURRENT_WARNING_EVENT)
+                .data(warrning)
+                .retrieveFlux(MessageBoundary.class);
+    }
+
+    @GetMapping(path ="/consumption-warning")
+    public Flux<MessageBoundary> getConsumptionWarningEvent() {
+        MessageBoundary warrning =generateConsumptionWarning(20000f);
+        // demo - Warning
+        return this.requester
+                .route(CONSUMPTION_WARNING_EVENT)
+                .data(warrning)
+                .retrieveFlux(MessageBoundary.class);
+    }
+
+    @PostMapping(path ="/new-house")
+    public Mono<MessageBoundary> createNewHouse(@RequestBody MessageBoundary message) {
+        return this.requester.route(newHouseEventRoute)
                 .data(message)
                 .retrieveMono(MessageBoundary.class);
     }
 
-    @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<MessageBoundary> getAll() {
-        return this.requester
-                .route(GET_ALL_MESSAGES_ROUTE)
-                .retrieveFlux(MessageBoundary.class);
-    }
-
-    @GetMapping(
-            path= {"/byIds/{ids}"},
-            produces = {MediaType.TEXT_EVENT_STREAM_VALUE})
-    public Flux<MessageBoundary> getMessagesByIDs(@PathVariable String ids) {
-        Flux<IdBoundary> idFlux = Flux
-                .fromArray(ids.split(","))
-                .map(IdBoundary::new);
-
-        return this.requester
-                .route(GET_MESSAGES_BY_ID_ROUTE)
-                .data(idFlux)
-                .retrieveFlux(MessageBoundary.class);
-    }
-
-    @PostMapping(
-            path= {"/byReferences"},
-            consumes = {MediaType.APPLICATION_JSON_VALUE},
-            produces = {MediaType.TEXT_EVENT_STREAM_VALUE})
-    public Flux<MessageBoundary> getMessagesByExternalReferences
-            (@RequestBody List<ExternalReferenceBoundary> references) {
-
-        return this.requester
-                .route(GET_MESSAGES_BY_EXT_REF_ROUTE)
-                .data(Flux.fromIterable(references))
-                .retrieveFlux(MessageBoundary.class);
-    }
-
-    @DeleteMapping
-    public Mono<Void> deleteAll() {
-        return this.requester
-                .route(DELETE_ALL_MESSAGES_ROUTE)
+    @PostMapping(path ="/device-event")
+    public Mono<Void> handleDeviceEvent(@RequestBody MessageBoundary message) {
+        return this.requester.route(deviceEventRoute)
+                .data(message)
                 .send();
     }
+
+    @GetMapping(path ="/current-consumption")
+    public Flux<MessageBoundary> getCurrentConsumptionSummary(@RequestBody List<MessageBoundary> messages) {
+        return this.requester.route(liveConsumptionRoute)
+                .data(Flux.fromIterable(messages))
+                .retrieveFlux(MessageBoundary.class);
+    }
+
+    @GetMapping(path ="/consumption-summary")
+    public Flux<MessageBoundary> getConsumptionSummary(@RequestBody List<MessageBoundary> messages) {
+        return this.requester.route(consumptionSummaryEventRoute)
+                .data(Flux.fromIterable(messages))
+                .retrieveFlux(MessageBoundary.class);
+    }
+    private MessageBoundary generateOvercurrentWarning(String deviceId, String deviceType, float currentConsumption) {
+        MessageBoundary overcurrentWarning = new MessageBoundary();
+        overcurrentWarning.setMessageId(UUID.randomUUID().toString());
+        overcurrentWarning.setPublishedTimestamp(new Date());
+        overcurrentWarning.setMessageType("overcurrentWarning");
+        overcurrentWarning.setSummary("device " + deviceId + " is over consuming");
+
+        // Set external references
+        ExternalReferenceBoundary externalReference = new ExternalReferenceBoundary();
+        externalReference.setExternalServiceId("1");
+        externalReference.setService("PowerManagementService");
+        Set<ExternalReferenceBoundary> refs = new HashSet<>();
+        refs.add(externalReference);
+        overcurrentWarning.setExternalReferences(refs);
+
+        // Set message details
+        HashMap<String, Object> details = new HashMap<>();
+        details.put("houseId", "houseXYZ");
+        details.put("deviceId", deviceId);
+        details.put("deviceType", deviceType);
+        details.put("currentConsumption", currentConsumption);
+        overcurrentWarning.setMessageDetails(details);
+
+        return overcurrentWarning;
+    }
+    private MessageBoundary generateConsumptionWarning(float currentConsumption) {
+        MessageBoundary consumptionWarning = new MessageBoundary();
+        consumptionWarning.setMessageId(UUID.randomUUID().toString());
+        consumptionWarning.setPublishedTimestamp(new Date());
+        consumptionWarning.setMessageType("consumptionWarning");
+        consumptionWarning.setSummary("You have reached your average daily consumption");
+
+        // Set external references
+        ExternalReferenceBoundary externalReference = new ExternalReferenceBoundary();
+        externalReference.setExternalServiceId("2");
+        externalReference.setService("EnergyUsageService");
+        Set<ExternalReferenceBoundary> refs = new HashSet<>();
+        refs.add(externalReference);
+        consumptionWarning.setExternalReferences(refs);
+
+        // Set message details
+        HashMap<String, Object> details = new HashMap<>();
+        details.put("houseId", "houseXYZ");
+        details.put("currentConsumption", currentConsumption);
+        consumptionWarning.setMessageDetails(details);
+
+        return consumptionWarning;
+    }
+
 }

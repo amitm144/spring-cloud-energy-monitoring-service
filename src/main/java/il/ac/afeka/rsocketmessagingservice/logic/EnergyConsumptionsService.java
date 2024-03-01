@@ -1,6 +1,5 @@
 package il.ac.afeka.rsocketmessagingservice.logic;
 
-import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
