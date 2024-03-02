@@ -5,6 +5,7 @@ import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.messaging.rsocket.RSocketRequester;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -55,24 +56,25 @@ public class EnergyMonitoringClientController {
                 .route(LIVE_CONSUMPTION_ROUTE)
                 .retrieveMono(MessageBoundary.class);
     }
-    @GetMapping("/summary/daily?date={date}")
-    public Mono<MessageBoundary> getConsumptionSummary(@PathVariable Date date) {
+    @GetMapping("/summary/daily")
+    public Flux<MessageBoundary> getConsumptionSummary(@RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") Date date) {
         return this.requester
-                .route(LIVE_CONSUMPTION_ROUTE)
+                .route(CONSUMPTION_SUMMARY_ROUTE)
                 .data(date)
-                .retrieveMono(MessageBoundary.class);
+                .retrieveFlux(MessageBoundary.class);
     }
 
-    @GetMapping("/summary/monthly?month={month}")
-    public Mono<MessageBoundary> getConsumptionSummary(@PathVariable int month) {
+    @GetMapping("/summary/monthly")
+    public Flux<MessageBoundary> getConsumptionSummary(@RequestParam int month) {
         if (month < 1 || month > 12)
-            return Mono.error(new RuntimeException("Invalid month")); // TODO: change to custom exception
+            return Flux.error(new RuntimeException("Invalid month")); // Consider custom exception
 
         return this.requester
                 .route(CONSUMPTION_SUMMARY_ROUTE)
                 .data(month)
-                .retrieveMono(MessageBoundary.class);
+                .retrieveFlux(MessageBoundary.class);
     }
+
 
     @GetMapping(path ="/warning/overcurrent")
     public Flux<MessageBoundary> getAllOverCurrentWarningEvents() {
