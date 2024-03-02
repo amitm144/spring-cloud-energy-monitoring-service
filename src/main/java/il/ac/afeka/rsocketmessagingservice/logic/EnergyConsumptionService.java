@@ -2,28 +2,56 @@ package il.ac.afeka.rsocketmessagingservice.logic;
 
 import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
-import il.ac.afeka.rsocketmessagingservice.repositories.MessageRepository;
+import il.ac.afeka.rsocketmessagingservice.repositories.EnergyMonitoringRepository;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
 public class EnergyConsumptionService implements EnergyConsumptionsService {
-    private final MessageRepository messageRepository;
+    private final EnergyMonitoringRepository energyMonitoringRepository;
 
-    public EnergyConsumptionService(MessageRepository messageRepository) {
-        this.messageRepository = messageRepository;
+    public EnergyConsumptionService(EnergyMonitoringRepository energyMonitoringRepository) {
+        this.energyMonitoringRepository = energyMonitoringRepository;
     }
+
     @Override
-    public Mono<MessageBoundary> createNewHouse(MessageBoundary message) {
-        MessageBoundary liveConsumptionSummary = GetDemoLiveConsumptionSummeryBoundry();
-        return Mono.just(liveConsumptionSummary);
+    public Mono<MessageBoundary> getLiveConsumption() {
+        return Mono.just(createDemoLiveConsumptionSummeryBoundary());
     }
 
-    private MessageBoundary GetDemoLiveConsumptionSummeryBoundry() {
+    @Override
+    public Mono<Void> handleDeviceEvent(MessageBoundary message) {
+        return null; // Fire and Forget returns nothing
+    }
+
+    @Override
+    public Flux<MessageBoundary> getLiveConsumptionSummery() {
+        MessageBoundary liveConsumptionSummary = createDemoLiveConsumptionSummeryBoundary();
+        return Flux.just(liveConsumptionSummary);
+    }
+
+    @Override
+    public Flux<MessageBoundary> getConsumptionSummaryByDay(Date day) {
+        MessageBoundary summary = createDemoLiveConsumptionSummeryBoundary();
+        summary.setPublishedTimestamp(day);
+        summary.setMessageType("consumptionSummary");
+
+        return Flux.just(summary);
+    }
+
+    @Override
+    public Flux<MessageBoundary> getConsumptionSummaryByMonth(Date date) {
+        MessageBoundary summary = createDemoLiveConsumptionSummeryBoundary();
+        summary.setPublishedTimestamp(date);
+        summary.setMessageType("consumptionSummary");
+
+        return Flux.just(summary);
+    }
+
+    private MessageBoundary createDemoLiveConsumptionSummeryBoundary() {
         // Create a new MessageBoundary object with the demo data
         MessageBoundary liveConsumptionSummary = new MessageBoundary();
         liveConsumptionSummary.setMessageId("12345");
@@ -78,20 +106,52 @@ public class EnergyConsumptionService implements EnergyConsumptionsService {
         return liveConsumptionSummary;
     }
 
-    @Override
-    public Mono<Void> HandleDeviceEvent(MessageBoundary message) {
-        return null; // Fire and Forget returns nothing
-    }
+    public Flux<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption) {
+        MessageBoundary overCurrentWarning = new MessageBoundary();
+        overCurrentWarning.setMessageId(UUID.randomUUID().toString());
+        overCurrentWarning.setPublishedTimestamp(new Date());
+        overCurrentWarning.setMessageType("overcurrentWarning");
+        overCurrentWarning.setSummary("device " + deviceId + " is over consuming");
 
-    @Override
-    public Flux<MessageBoundary> GetCurrentConsumptionSummery(Flux<MessageBoundary> references) {
-        MessageBoundary liveConsumptionSummary = GetDemoLiveConsumptionSummeryBoundry();
-        return Flux.just(liveConsumptionSummary);
-    }
+        // Set external references
+        ExternalReferenceBoundary externalReference = new ExternalReferenceBoundary();
+        externalReference.setExternalServiceId("1");
+        externalReference.setService("PowerManagementService");
+        Set<ExternalReferenceBoundary> refs = new HashSet<>();
+        refs.add(externalReference);
+        overCurrentWarning.setExternalReferences(refs);
 
-    @Override
-    public Flux<MessageBoundary> GetConsumptionSummery(Flux<MessageBoundary> references) {
-        MessageBoundary liveConsumptionSummary = GetDemoLiveConsumptionSummeryBoundry();
-        return Flux.just(liveConsumptionSummary);
+        // Set message details
+        HashMap<String, Object> details = new HashMap<>();
+        details.put("houseId", "houseXYZ");
+        details.put("deviceId", deviceId);
+        details.put("deviceType", deviceType);
+        details.put("currentConsumption", currentConsumption);
+        overCurrentWarning.setMessageDetails(details);
+
+        return Flux.just(overCurrentWarning);
+    }
+    public Flux<MessageBoundary> generateConsumptionWarning(float currentConsumption) {
+        MessageBoundary consumptionWarning = new MessageBoundary();
+        consumptionWarning.setMessageId(UUID.randomUUID().toString());
+        consumptionWarning.setPublishedTimestamp(new Date());
+        consumptionWarning.setMessageType("consumptionWarning");
+        consumptionWarning.setSummary("You have reached your average daily consumption");
+
+        // Set external references
+        ExternalReferenceBoundary externalReference = new ExternalReferenceBoundary();
+        externalReference.setExternalServiceId("2");
+        externalReference.setService("EnergyUsageService");
+        Set<ExternalReferenceBoundary> refs = new HashSet<>();
+        refs.add(externalReference);
+        consumptionWarning.setExternalReferences(refs);
+
+        // Set message details
+        HashMap<String, Object> details = new HashMap<>();
+        details.put("houseId", "houseXYZ");
+        details.put("currentConsumption", currentConsumption);
+        consumptionWarning.setMessageDetails(details);
+
+        return Flux.just(consumptionWarning);
     }
 }

@@ -4,13 +4,14 @@ import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Date;
+
 public interface EnergyConsumptionsService {
-
-    Mono<MessageBoundary> createNewHouse(MessageBoundary message);
-
-    Mono<Void> HandleDeviceEvent(MessageBoundary message);
-
-    Flux<MessageBoundary> GetCurrentConsumptionSummery(Flux<MessageBoundary> references);
-
-    Flux<MessageBoundary> GetConsumptionSummery(Flux<MessageBoundary> references);
+    Mono<MessageBoundary> getLiveConsumption();
+    Mono<Void> handleDeviceEvent(MessageBoundary message);
+    Flux<MessageBoundary> getLiveConsumptionSummery();
+    Flux<MessageBoundary> getConsumptionSummaryByDay(Date day);
+    Flux<MessageBoundary> getConsumptionSummaryByMonth(Date date);
+    Flux<MessageBoundary> generateConsumptionWarning(float currentConsumption);
+    Flux<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption);
 }
