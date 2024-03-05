@@ -14,4 +14,10 @@ public interface EnergyConsumptionsService {
     Flux<MessageBoundary> getConsumptionSummaryByMonth(Date date);
     Flux<MessageBoundary> generateConsumptionWarning(float currentConsumption);
     Flux<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption);
+
+    //kafka
+    Mono<MessageBoundary> send(MessageBoundary message);
+    Mono<MessageBoundary> store(MessageBoundary message);
+    Flux<MessageBoundary> getAll();
+    Mono<Void> cleanup();
 }

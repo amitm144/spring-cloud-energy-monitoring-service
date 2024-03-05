@@ -51,6 +51,26 @@ public class EnergyConsumptionService implements EnergyConsumptionsService {
         return Flux.just(summary);
     }
 
+    @Override
+    public Mono<MessageBoundary> send(MessageBoundary message) {
+        return null;
+    }
+
+    @Override
+    public Mono<MessageBoundary> store(MessageBoundary message) {
+        return null;
+    }
+
+    @Override
+    public Flux<MessageBoundary> getAll() {
+        return null;
+    }
+
+    @Override
+    public Mono<Void> cleanup() {
+        return null;
+    }
+
     private MessageBoundary createDemoLiveConsumptionSummeryBoundary() {
         // Create a new MessageBoundary object with the demo data
         MessageBoundary liveConsumptionSummary = new MessageBoundary();
@@ -131,6 +151,8 @@ public class EnergyConsumptionService implements EnergyConsumptionsService {
 
         return Flux.just(overCurrentWarning);
     }
+
+
     public Flux<MessageBoundary> generateConsumptionWarning(float currentConsumption) {
         MessageBoundary consumptionWarning = new MessageBoundary();
         consumptionWarning.setMessageId(UUID.randomUUID().toString());
