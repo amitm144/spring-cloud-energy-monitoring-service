@@ -1,8 +1,13 @@
 package il.ac.afeka.rsocketmessagingservice.logic;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
+import il.ac.afeka.rsocketmessagingservice.repositories.DeviceNotificationRepository;
 import il.ac.afeka.rsocketmessagingservice.repositories.EnergyMonitoringRepository;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -12,9 +17,27 @@ import java.util.*;
 @Service
 public class EnergyConsumptionService implements EnergyConsumptionsService {
     private final EnergyMonitoringRepository energyMonitoringRepository;
+    private final DeviceNotificationRepository deviceNotificationRepository;
 
-    public EnergyConsumptionService(EnergyMonitoringRepository energyMonitoringRepository) {
+    //    private StreamBridge kafka;
+    private ObjectMapper jackson;
+    private String targetTopic;
+
+    public EnergyConsumptionService(EnergyMonitoringRepository energyMonitoringRepository,
+                                    DeviceNotificationRepository deviceNotificationRepository) {
         this.energyMonitoringRepository = energyMonitoringRepository;
+        this.deviceNotificationRepository = deviceNotificationRepository;
+//        this.kafka = kafka;
+    }
+
+    @Value("${target.topic.name:topic1}")
+    public void setTargetTopic(String targetTopic) {
+        this.targetTopic = targetTopic;
+    }
+
+    @PostConstruct
+    public void init() {
+        this.jackson = new ObjectMapper();
     }
 
     @Override
@@ -52,17 +75,25 @@ public class EnergyConsumptionService implements EnergyConsumptionsService {
     }
 
     @Override
-    public Mono<MessageBoundary> send(MessageBoundary message) {
+    public Mono<MessageBoundary> send(DeviceBoundary message) {
         return null;
     }
 
     @Override
-    public Mono<MessageBoundary> store(MessageBoundary message) {
-        return null;
+    public Mono<DeviceBoundary> storeDeviceNotificationMessage(DeviceBoundary deviceBoundary) {
+        if (deviceBoundary.getId() == null) {
+            deviceBoundary.setId(UUID.randomUUID().toString());
+        }
+
+        return Mono.just(deviceBoundary)
+                .map(DeviceBoundary::toEntity)
+                .flatMap(this.deviceNotificationRepository::save)
+                .map(DeviceBoundary::new)
+                .log();
     }
 
     @Override
-    public Flux<MessageBoundary> getAll() {
+    public Flux<DeviceBoundary> getAllDevicesNotificationMessages() {
         return null;
     }
 

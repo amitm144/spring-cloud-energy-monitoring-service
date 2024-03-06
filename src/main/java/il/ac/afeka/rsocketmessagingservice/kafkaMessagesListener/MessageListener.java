@@ -1,6 +1,7 @@
 package il.ac.afeka.rsocketmessagingservice.kafkaMessagesListener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import il.ac.afeka.rsocketmessagingservice.logic.EnergyConsumptionsService;
 import jakarta.annotation.PostConstruct;
@@ -9,7 +10,6 @@ import org.apache.commons.logging.LogFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.HashMap;
 import java.util.function.Consumer;
 
 @Configuration
@@ -28,25 +28,20 @@ public class MessageListener {
 	}
 
 	@Bean
-	public Consumer<String> messageSink(){
-		return stringInput->{
+	public Consumer<String> messageSink() {
+		return stringInput -> {
 			try {
-				this.logger.trace("*** received: " + stringInput);
-
 				MessageBoundary message = this.jackson.readValue(stringInput, MessageBoundary.class);
+				if (message.getMessageType().equals("deviceNotification") &
+						message.getMessageDetails() != null) {
 
-				if (message.getMessageDetails() == null) {
-					message.setMessageDetails(new HashMap<>());
+					String deviceJson = jackson.writeValueAsString(message.getMessageDetails().get("device"));
+					DeviceBoundary deviceBoundary = jackson.readValue(deviceJson, DeviceBoundary.class);
+					DeviceBoundary storedDeviceNotificationMessage = this.energyService
+							.storeDeviceNotificationMessage(deviceBoundary)
+							.block();
 				}
-				message.getMessageDetails()
-						.put("status", "received-from-kafka");
-
-				MessageBoundary storedMessage = this.energyService
-						.store(message)
-						.block();
-
-				this.logger.info("*** stored: " + storedMessage);
-			}catch (Exception e) {
+			} catch (Exception e) {
 				e.printStackTrace();
 				this.logger.error(e);
 			}

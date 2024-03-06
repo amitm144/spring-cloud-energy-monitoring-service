@@ -1,5 +1,6 @@
 package il.ac.afeka.rsocketmessagingservice.logic;
 
+import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -16,8 +17,8 @@ public interface EnergyConsumptionsService {
     Flux<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption);
 
     //kafka
-    Mono<MessageBoundary> send(MessageBoundary message);
-    Mono<MessageBoundary> store(MessageBoundary message);
-    Flux<MessageBoundary> getAll();
+    Mono<MessageBoundary> send(DeviceBoundary message);
+    Mono<DeviceBoundary> storeDeviceNotificationMessage(DeviceBoundary message);
+    Flux<DeviceBoundary> getAllDevicesNotificationMessages();
     Mono<Void> cleanup();
 }
