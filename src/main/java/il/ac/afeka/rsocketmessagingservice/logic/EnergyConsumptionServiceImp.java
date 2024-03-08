@@ -1,125 +1,109 @@
 package il.ac.afeka.rsocketmessagingservice.logic;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import il.ac.afeka.rsocketmessagingservice.data.DeviceEntity;
-import il.ac.afeka.rsocketmessagingservice.repositories.DeviceNotificationRepository;
+import il.ac.afeka.rsocketmessagingservice.repositories.DeviceDataRepository;
 import il.ac.afeka.rsocketmessagingservice.repositories.EnergyMonitoringRepository;
 import jakarta.annotation.PostConstruct;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
+import static il.ac.afeka.rsocketmessagingservice.utils.DateUtils.isLastDayOfMonth;
+
 @Service
 public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     private final EnergyMonitoringRepository energyMonitoringRepository;
-    private final DeviceNotificationRepository deviceNotificationRepository;
+    private final DeviceDataRepository deviceDataRepository;
 
-    public EnergyConsumptionServiceImp(EnergyMonitoringRepository energyMonitoringRepository,
-                                       DeviceNotificationRepository deviceNotificationRepository) {
+    private final StreamBridge kafkaProducer;
+    private final ObjectMapper jackson;
+    private String targetTopic;
+
+    private Log logger = LogFactory.getLog(EnergyConsumptionServiceImp.class);
+
+
+    public EnergyConsumptionServiceImp(StreamBridge kafkaProducer, DeviceDataRepository deviceDataRepository,
+                                       EnergyMonitoringRepository energyMonitoringRepository) {
         this.energyMonitoringRepository = energyMonitoringRepository;
-        this.deviceNotificationRepository = deviceNotificationRepository;
+        this.deviceDataRepository = deviceDataRepository;
+        this.kafkaProducer = kafkaProducer;
+        this.jackson = new ObjectMapper();
     }
+
+    @Value("${target.topic.name:topic1}")
+    public void setTargetTopic(String targetTopic) {
+        this.targetTopic = targetTopic;
+    }
+
     @PostConstruct
-    void startDailyThread()
-    {
+    public void startDailyThread() {
         Thread vt = Thread.startVirtualThread(() -> {
-            // This block runs in a virtual thread
-            System.err.println(LocalDateTime.now() + " : thread id " + Thread.currentThread().getId() + " start and sleep");
             // Calculate time until midnight
-            //TimeUnit
+            long sleepTime = calculateSleepTimeUntilMidnightInMilliseconds();
             try {
-                // Sleep until midnight
-                while(true)
-                {
-                    long sleepTime = calculateSleepTimeUntilMidnight();
+                while(true) {
+                    // Sleep until midnight
                     TimeUnit.MILLISECONDS.sleep(sleepTime);
-                    UpdateDevices();
+                    MessageBoundary summary = generateDailySummary();
+                    String summaryMessage = this.jackson.writeValueAsString(summary);
+                    this.kafkaProducer.send(this.targetTopic, summaryMessage);
+
+                    if (isLastDayOfMonth()) {
+                        summary = generateMonthlySummary();
+                        summaryMessage = this.jackson.writeValueAsString(summary);
+                        this.kafkaProducer.send(this.targetTopic, summaryMessage);
+                    }
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException | JsonProcessingException e) {
                 // If the thread is interrupted, handle the exception
                 Thread.currentThread().interrupt();
-                System.err.println("Thread was interrupted, failed to complete operation");
+                this.logger.error("Thread "
+                        + Thread.currentThread().getId()
+                        + " was interrupted, failed to complete operation: "
+                        + e.getMessage()
+                );
             }
-
-            // Code to be executed after waking up, e.g., database read/update
-
-            System.err.println(LocalDateTime.now() + " : thread id " + Thread.currentThread().getId() + " woke up, completing tasks.");
+            // Code to be executed after waking up
+            this.logger.debug(LocalDateTime.now() + " : thread id " + Thread.currentThread().getId() + " woke up");
         });
-
-        // Optionally, you can store the thread reference or add additional logic
     }
 
-    private void UpdateDevices() {
-        Flux<DeviceEntity> devices =
-        deviceNotificationRepository
-                .findAll();
-        devices
-            .filter(device -> device.getStatus().isOn())        //Case Device is ON
-            .map(device->{
-                Date date = new Date();            //LastUpdate 00:00
-                float total = date.getTime() - device.getLastUpdateTimestamp().getTime();
-                device.setTotalActiveTime(device.getTotalActiveTime()+total);        //SetTotal
-                device.setLastUpdateTimestamp(date);
-                return device;
-            });
-
-        Mono<Float> dailyTotalTime =
-            devices
-                .map(d->d.getTotalActiveTime())
-                    .reduce(0.0f,Float::sum);     //Update DailyTotal
-            devices
-                .map(device -> {
-                    device.setTotalActiveTime(0);
-                    return device;
-                })
-                .flatMap(deviceNotificationRepository::save); // Ensure reset devices are saved
-        DailySummeryBoundary summery =createDailySummeryBoundary(dailyTotalTime);
-
-        //send to Kafka message
-
-    }
-
-    private DailySummeryBoundary createDailySummeryBoundary(Mono<Float> dailyTotalTime) {return null;
-    }
-
-    private long calculateSleepTimeUntilMidnight() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime nextMidnight = now.toLocalDate().atTime(LocalTime.MIDNIGHT).plusDays(1);
-        return Duration.between(now, nextMidnight).toMillis();
-    }
     @Override
-    public Mono<Void> handleDeviceEvent(DeviceBoundary deviceBoundary) {
-        return deviceNotificationRepository.findById(deviceBoundary.getId())
-                .flatMap(deviceNotification -> {
+    public Mono<Void> handleDeviceEvent(DeviceBoundary deviceEvent) {
+        return deviceDataRepository.findById(deviceEvent.getId())
+                .flatMap(device -> {
                     // Device exists, set totalActiveTime
-                    if (!deviceNotification.getStatus().isOn()){
-                        deviceNotification.setTotalActiveTime(
-                                deviceNotification.getTotalActiveTime() +
-                                        getNewTime(deviceBoundary.getLastUpdateTimestamp(),
-                                                deviceNotification.getLastUpdateTimestamp()));
+                    if (!device.getStatus().isOn()) {
+                        float totalTimeOn = Duration.between(device.getLastUpdateTimestamp(),
+                                deviceEvent.getLastUpdateTimestamp()).toHours();
+                        device.setTotalActiveTime(device.getTotalActiveTime() + totalTimeOn);
                     }
-                    // Save the updated deviceNotification
-                    return deviceNotificationRepository.save(deviceNotification);
+                    // Save the updated device
+                    return deviceDataRepository.save(device);
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     // Device does not exist, set totalActiveTime to 0
-                    DeviceEntity deviceNotification = deviceBoundary.toEntity();
-                    deviceNotification.setTotalActiveTime(0);
-                    return deviceNotificationRepository.save(deviceNotification);
+                    DeviceEntity deviceNotification = deviceEvent.toEntity();
+                    deviceNotification.setTotalActiveTime(0.0f);
+                    return deviceDataRepository.save(deviceNotification);
                 }))
                 .then(Mono.empty());
-    }
-
-    private float getNewTime(Date oldTime, Date newTime) {
-        return ((float)newTime.getTime() - (float)oldTime.getTime()) * 360000;
     }
 
     @Override
@@ -141,13 +125,6 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     @Override
     public Flux<MessageBoundary> getConsumptionSummaryByMonth(Date date) {
         return null;
-    }
-
-    private Mono<DeviceEntity> saveToRepository(DeviceBoundary deviceBoundary){
-        if (deviceBoundary.getId() == null) {
-            deviceBoundary.setId(UUID.randomUUID().toString());
-        }
-        return this.deviceNotificationRepository.save(deviceBoundary.toEntity());
     }
 
     public Flux<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption) {
@@ -175,6 +152,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
 
         return Flux.just(overCurrentWarning);
     }
+
     public Flux<MessageBoundary> generateConsumptionWarning(float currentConsumption) {
         MessageBoundary consumptionWarning = new MessageBoundary();
         consumptionWarning.setMessageId(UUID.randomUUID().toString());
@@ -197,5 +175,43 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         consumptionWarning.setMessageDetails(details);
 
         return Flux.just(consumptionWarning);
+    }
+
+
+    private MessageBoundary generateDailySummary() {
+        LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
+        LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
+        Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startOfDay, endOfDay);
+
+        devices.filter(d -> d.getStatus().isOn())
+                .map(device-> {
+                    float totalTimeOn = Duration.between(device.getLastUpdateTimestamp(), LocalDateTime.now()).toHours();
+                    device.setTotalActiveTime(device.getTotalActiveTime() + totalTimeOn);
+                    return device;
+                });
+
+        LocalDateTime now = LocalDateTime.now();
+        MessageBoundary dailySummary = createDailySummary(now);
+        devices
+                .map(device -> {
+                    device.setTotalActiveTime(0);
+                    device.setLastUpdateTimestamp(now);
+                    return device;
+                })
+                .map(deviceDataRepository::save);
+
+        return dailySummary;
+    }
+
+    private MessageBoundary generateMonthlySummary() {
+        return null;
+    }
+
+    private MessageBoundary createDailySummary(LocalDateTime date) { return null;}
+
+    private long calculateSleepTimeUntilMidnightInMilliseconds() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime nextMidnight = now.toLocalDate().atTime(LocalTime.MIDNIGHT).plusDays(1);
+        return Duration.between(now, nextMidnight).toMillis();
     }
 }

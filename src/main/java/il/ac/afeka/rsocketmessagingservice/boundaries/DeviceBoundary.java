@@ -2,22 +2,21 @@ package il.ac.afeka.rsocketmessagingservice.boundaries;
 
 import il.ac.afeka.rsocketmessagingservice.data.DeviceEntity;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 public class DeviceBoundary {
 	private String id;
 	private String type;
 	private String subType;
-	private Date registrationTimestamp;
-	private Date lastUpdateTimestamp;
+	private LocalDateTime registrationTimestamp;
+	private LocalDateTime lastUpdateTimestamp;
 	private String location;
 	private int manufacturerPowerInWatts;
 	private StatusBoundary status;
 	private Map<String, Object> additionalAttributes;
 
-	public DeviceBoundary() {
-	}
+	public DeviceBoundary() {}
 
 	public DeviceBoundary(DeviceEntity deviceEntity) {
 		this.id = deviceEntity.getId();
@@ -42,7 +41,6 @@ public class DeviceBoundary {
 		rv.setManufacturerPowerInWatts(this.getManufacturerPowerInWatts());
 		rv.setStatus(this.getStatus().toEntity());
 		rv.setAdditionalAttributes(this.getAdditionalAttributes());
-		rv.setTotalActiveTime(0.0f);
 		return rv;
 	}
 
@@ -70,19 +68,19 @@ public class DeviceBoundary {
 		this.subType = subType;
 	}
 
-	public Date getRegistrationTimestamp() {
+	public LocalDateTime getRegistrationTimestamp() {
 		return registrationTimestamp;
 	}
 
-	public void setRegistrationTimestamp(Date registrationTimestamp) {
+	public void setRegistrationTimestamp(LocalDateTime registrationTimestamp) {
 		this.registrationTimestamp = registrationTimestamp;
 	}
 
-	public Date getLastUpdateTimestamp() {
+	public LocalDateTime getLastUpdateTimestamp() {
 		return lastUpdateTimestamp;
 	}
 
-	public void setLastUpdateTimestamp(Date lastUpdateTimestamp) {
+	public void setLastUpdateTimestamp(LocalDateTime lastUpdateTimestamp) {
 		this.lastUpdateTimestamp = lastUpdateTimestamp;
 	}
 
