@@ -28,22 +28,19 @@ public class EnergyMonitoringRSocketController {
 
     @MessageMapping("${app.rsocket.event.consumption.summary}")
     public Flux<MessageBoundary> publishConsumptionSummery() {
-        // TODO: change to daily and monthly kafka event
         this.logger.debug("publishing consumption summary");
         return energyService.getConsumptionSummaryByDay(new Date());
     }
 
     @MessageMapping("${app.rsocket.event.consumption.warning}")
-    public Flux<MessageBoundary> publishConsumptionWarning() {
-        // TODO: change to kafka event
+    public Flux<MessageBoundary> getConsumptionWarnings() {
         this.logger.debug("publishing over-consumption warning");
-        return energyService.generateConsumptionWarning(20.7f);
+        return energyService.getConsumptionWarnings() ;
     }
 
     @MessageMapping("${app.rsocket.event.overcurrent.warning}")
-    public Flux<MessageBoundary> publishOverCurrentWarning() {
-        // TODO: change to kafka event
+    public Flux<MessageBoundary> getOverCurrentWarnings() {
         this.logger.debug("publishing over-current warning");
-        return energyService.generateOverCurrentWarning("abc-123", "LED Lamp", 7.2f);
+        return energyService.getOverCurrentWarnings();
     }
 }

@@ -3,14 +3,12 @@ package il.ac.afeka.rsocketmessagingservice.data;
 import java.util.Arrays;
 
 public class StatusEntity {
-
 	private boolean isOn;
 	private int brightness;
 	private int[] colorRGB;
 	private float currentPowerInWatts;
 
-	public StatusEntity() {
-	}
+	public StatusEntity() {}
 
 	public boolean isOn() {
 		return isOn;

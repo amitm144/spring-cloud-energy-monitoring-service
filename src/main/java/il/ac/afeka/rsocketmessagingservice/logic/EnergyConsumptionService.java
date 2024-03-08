@@ -10,9 +10,11 @@ import java.util.Date;
 public interface EnergyConsumptionService {
     Mono<MessageBoundary> getLiveConsumption();
     Mono<Void> handleDeviceEvent(DeviceBoundary deviceBoundary);
-    Flux<MessageBoundary> getLiveConsumptionSummery();
+    Flux<MessageBoundary> getLiveConsumptionSummary();
     Flux<MessageBoundary> getConsumptionSummaryByDay(Date day);
     Flux<MessageBoundary> getConsumptionSummaryByMonth(Date date);
-    Flux<MessageBoundary> generateConsumptionWarning(float currentConsumption);
-    Flux<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption);
+    Flux<MessageBoundary> getConsumptionWarnings();
+    Flux<MessageBoundary> getOverCurrentWarnings();
+    void checkForOverCurrent(DeviceBoundary deviceDetails);
+    void checkForOverConsumption();
 }

@@ -4,8 +4,7 @@ public class ExternalReferenceEntity {
 	private String service;
 	private String externalServiceId;
 	
-	public ExternalReferenceEntity() {
-	}
+	public ExternalReferenceEntity() {}
 
 	public ExternalReferenceEntity(String service, String externalServiceId) {
 		this.service = service;

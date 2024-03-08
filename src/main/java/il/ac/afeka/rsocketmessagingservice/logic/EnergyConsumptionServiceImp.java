@@ -1,18 +1,19 @@
 package il.ac.afeka.rsocketmessagingservice.logic;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
-import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import il.ac.afeka.rsocketmessagingservice.data.DeviceEntity;
+import il.ac.afeka.rsocketmessagingservice.data.ExternalReferenceEntity;
+import il.ac.afeka.rsocketmessagingservice.data.MessageEntity;
+import il.ac.afeka.rsocketmessagingservice.messageHandler.KafkaMessageHandler;
+import il.ac.afeka.rsocketmessagingservice.messageHandler.MessageQueueHandler;
 import il.ac.afeka.rsocketmessagingservice.repositories.DeviceDataRepository;
 import il.ac.afeka.rsocketmessagingservice.repositories.EnergyMonitoringRepository;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -30,25 +31,25 @@ import static il.ac.afeka.rsocketmessagingservice.utils.DateUtils.isLastDayOfMon
 public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     private final EnergyMonitoringRepository energyMonitoringRepository;
     private final DeviceDataRepository deviceDataRepository;
+    private final MessageQueueHandler messageHandler;
+    private final Log logger = LogFactory.getLog(EnergyConsumptionServiceImp.class);
 
-    private final StreamBridge kafkaProducer;
-    private final ObjectMapper jackson;
-    private String targetTopic;
+    @Value("${house.consumption.limit:8000}")
+    private float OVERCONSUMPTION_LIMIT;
+    @Value("${house.current.limit:15}")
+    private float OVERCURRENT_LIMIT;
+    @Value("${house.voltage:220}")
+    private float HOUSEHOLD_VOLTAGE;
+    @Value("${spring.application.id}")
+    private String EXT_SERVICE_ID;
+    @Value("${spring.application.name}")
+    private String SERVICE_NAME;
 
-    private Log logger = LogFactory.getLog(EnergyConsumptionServiceImp.class);
-
-
-    public EnergyConsumptionServiceImp(StreamBridge kafkaProducer, DeviceDataRepository deviceDataRepository,
+    public EnergyConsumptionServiceImp(KafkaMessageHandler messageHandler, DeviceDataRepository deviceDataRepository,
                                        EnergyMonitoringRepository energyMonitoringRepository) {
         this.energyMonitoringRepository = energyMonitoringRepository;
         this.deviceDataRepository = deviceDataRepository;
-        this.kafkaProducer = kafkaProducer;
-        this.jackson = new ObjectMapper();
-    }
-
-    @Value("${target.topic.name:topic1}")
-    public void setTargetTopic(String targetTopic) {
-        this.targetTopic = targetTopic;
+        this.messageHandler = messageHandler;
     }
 
     @PostConstruct
@@ -60,18 +61,18 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                 while(true) {
                     // Sleep until midnight
                     TimeUnit.MILLISECONDS.sleep(sleepTime);
+                    // Generate daily summary
                     MessageBoundary summary = generateDailySummary();
-                    String summaryMessage = this.jackson.writeValueAsString(summary);
-                    this.kafkaProducer.send(this.targetTopic, summaryMessage);
-
+                    // issue daily consumption summary
+                    this.messageHandler.publish(summary);
+                    // Generate monthly summary if needed and issue it
                     if (isLastDayOfMonth()) {
                         summary = generateMonthlySummary();
-                        summaryMessage = this.jackson.writeValueAsString(summary);
-                        this.kafkaProducer.send(this.targetTopic, summaryMessage);
+                        this.messageHandler.publish(summary);
                     }
                 }
             } catch (InterruptedException | JsonProcessingException e) {
-                // If the thread is interrupted, handle the exception
+                // If the thread is interrupted, log the exception
                 Thread.currentThread().interrupt();
                 this.logger.error("Thread "
                         + Thread.currentThread().getId()
@@ -88,13 +89,13 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     public Mono<Void> handleDeviceEvent(DeviceBoundary deviceEvent) {
         return deviceDataRepository.findById(deviceEvent.getId())
                 .flatMap(device -> {
-                    // Device exists, set totalActiveTime
+                    // Device exists, calculate remainder of time on and reset totalActiveTime
                     if (!device.getStatus().isOn()) {
                         float totalTimeOn = Duration.between(device.getLastUpdateTimestamp(),
                                 deviceEvent.getLastUpdateTimestamp()).toHours();
                         device.setTotalActiveTime(device.getTotalActiveTime() + totalTimeOn);
                     }
-                    // Save the updated device
+                    // Save the updated device data
                     return deviceDataRepository.save(device);
                 })
                 .switchIfEmpty(Mono.defer(() -> {
@@ -111,9 +112,8 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return null;
     }
 
-
     @Override
-    public Flux<MessageBoundary> getLiveConsumptionSummery() {
+    public Flux<MessageBoundary> getLiveConsumptionSummary() {
         return null;
     }
 
@@ -127,66 +127,99 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return null;
     }
 
-    public Flux<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption) {
-        MessageBoundary overCurrentWarning = new MessageBoundary();
+    @Override
+    public Flux<MessageBoundary> getConsumptionWarnings() {
+        return this.energyMonitoringRepository.findAllByMessageType("consumptionWarning")
+                .map(MessageBoundary::new);
+    }
+
+    @Override
+    public Flux<MessageBoundary> getOverCurrentWarnings() {
+        return this.energyMonitoringRepository.findAllByMessageType("overcurrentWarning")
+                .map(MessageBoundary::new);
+    }
+
+    @Override
+    public void checkForOverCurrent(DeviceBoundary deviceDetails) {
+        if (!deviceDetails.getStatus().isOn())
+            return;
+
+        float deviceCurrentConsumption = deviceDetails.getStatus().getCurrentPowerInWatts() / HOUSEHOLD_VOLTAGE;
+        if (deviceCurrentConsumption > OVERCURRENT_LIMIT) {
+            MessageBoundary overCurrentMessage = generateOverCurrentWarning(deviceDetails.getId(),
+                    deviceDetails.getSubType(), deviceCurrentConsumption);
+            try {
+                this.messageHandler.publish(overCurrentMessage);
+            } catch (JsonProcessingException e) {
+                this.logger.error(e.getMessage());
+            }
+        }
+    }
+
+    @Override
+    public void checkForOverConsumption() {
+//        this.getLiveConsumption()
+//                .map(MessageBoundary::getMessageDetails)
+//                .map(map -> map.getOrDefault("consumption", 0))
+//                .
+    }
+
+    private MessageBoundary generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption) {
+        MessageEntity overCurrentWarning = new MessageEntity();
         overCurrentWarning.setMessageId(UUID.randomUUID().toString());
         overCurrentWarning.setPublishedTimestamp(new Date());
         overCurrentWarning.setMessageType("overcurrentWarning");
         overCurrentWarning.setSummary("device " + deviceId + " is over consuming");
 
         // Set external references
-        ExternalReferenceBoundary externalReference = new ExternalReferenceBoundary();
-        externalReference.setExternalServiceId("1");
-        externalReference.setService("PowerManagementService");
-        Set<ExternalReferenceBoundary> refs = new HashSet<>();
+        ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
+        Set<ExternalReferenceEntity> refs = new HashSet<>();
         refs.add(externalReference);
         overCurrentWarning.setExternalReferences(refs);
 
         // Set message details
         HashMap<String, Object> details = new HashMap<>();
-        details.put("houseId", "houseXYZ");
         details.put("deviceId", deviceId);
         details.put("deviceType", deviceType);
         details.put("currentConsumption", currentConsumption);
         overCurrentWarning.setMessageDetails(details);
 
-        return Flux.just(overCurrentWarning);
+        this.energyMonitoringRepository.save(overCurrentWarning);
+        return new MessageBoundary(overCurrentWarning);
     }
 
-    public Flux<MessageBoundary> generateConsumptionWarning(float currentConsumption) {
-        MessageBoundary consumptionWarning = new MessageBoundary();
+    private MessageBoundary generateConsumptionWarning(float currentConsumption) {
+        MessageEntity consumptionWarning = new MessageEntity();
         consumptionWarning.setMessageId(UUID.randomUUID().toString());
         consumptionWarning.setPublishedTimestamp(new Date());
         consumptionWarning.setMessageType("consumptionWarning");
-        consumptionWarning.setSummary("You have reached your average daily consumption");
+        consumptionWarning.setSummary("You have reached your daily consumption limit");
 
         // Set external references
-        ExternalReferenceBoundary externalReference = new ExternalReferenceBoundary();
-        externalReference.setExternalServiceId("2");
-        externalReference.setService("EnergyUsageService");
-        Set<ExternalReferenceBoundary> refs = new HashSet<>();
+        ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
+
+        Set<ExternalReferenceEntity> refs = new HashSet<>();
         refs.add(externalReference);
         consumptionWarning.setExternalReferences(refs);
 
         // Set message details
         HashMap<String, Object> details = new HashMap<>();
-        details.put("houseId", "houseXYZ");
         details.put("currentConsumption", currentConsumption);
         consumptionWarning.setMessageDetails(details);
 
-        return Flux.just(consumptionWarning);
+        this.energyMonitoringRepository.save(consumptionWarning);
+        return new MessageBoundary(consumptionWarning);
     }
-
 
     private MessageBoundary generateDailySummary() {
         LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
         LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
         Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startOfDay, endOfDay);
 
-        devices.filter(d -> d.getStatus().isOn())
+        devices.filter(device -> device.getStatus().isOn())
                 .map(device-> {
-                    float totalTimeOn = Duration.between(device.getLastUpdateTimestamp(), LocalDateTime.now()).toHours();
-                    device.setTotalActiveTime(device.getTotalActiveTime() + totalTimeOn);
+                    float remainingTimeOnInHours = Duration.between(device.getLastUpdateTimestamp(), LocalDateTime.now()).toHours();
+                    device.setTotalActiveTime(device.getTotalActiveTime() + remainingTimeOnInHours);
                     return device;
                 });
 
@@ -203,15 +236,22 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return dailySummary;
     }
 
+    private MessageBoundary createDailySummary(LocalDateTime date) { return null;}
+
     private MessageBoundary generateMonthlySummary() {
         return null;
     }
-
-    private MessageBoundary createDailySummary(LocalDateTime date) { return null;}
 
     private long calculateSleepTimeUntilMidnightInMilliseconds() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime nextMidnight = now.toLocalDate().atTime(LocalTime.MIDNIGHT).plusDays(1);
         return Duration.between(now, nextMidnight).toMillis();
+    }
+
+    private ExternalReferenceEntity createDefaultExternalReferenceEntity() {
+        ExternalReferenceEntity externalReference = new ExternalReferenceEntity();
+        externalReference.setExternalServiceId(EXT_SERVICE_ID);
+        externalReference.setService(SERVICE_NAME);
+        return externalReference;
     }
 }

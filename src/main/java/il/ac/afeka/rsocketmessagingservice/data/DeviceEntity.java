@@ -1,10 +1,8 @@
 package il.ac.afeka.rsocketmessagingservice.data;
 
-import il.ac.afeka.rsocketmessagingservice.boundaries.StatusBoundary;
 import org.springframework.data.annotation.Id;
 
 import java.time.LocalDateTime;
-import java.util.Date;
 import java.util.Map;
 
 public class DeviceEntity {
