@@ -1,6 +1,8 @@
 package il.ac.afeka.rsocketmessagingservice.boundaries;
 
 import il.ac.afeka.rsocketmessagingservice.data.MessageEntity;
+
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.Map;
 import java.util.Set;
@@ -10,7 +12,7 @@ public class MessageBoundary {
     private String messageId;
     private String summary;
     private String messageType;
-    private Date publishedTimestamp;
+    private LocalDateTime publishedTimestamp;
     private Set<ExternalReferenceBoundary> externalReferences;
     private Map<String, Object> messageDetails;
 
@@ -69,11 +71,11 @@ public class MessageBoundary {
         this.summary = summary;
     }
 
-    public Date getPublishedTimestamp() {
+    public LocalDateTime getPublishedTimestamp() {
         return publishedTimestamp;
     }
 
-    public void setPublishedTimestamp(Date publishedTimestamp) {
+    public void setPublishedTimestamp(LocalDateTime publishedTimestamp) {
         this.publishedTimestamp = publishedTimestamp;
     }
 
