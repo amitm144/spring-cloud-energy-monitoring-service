@@ -3,6 +3,7 @@ package il.ac.afeka.rsocketmessagingservice.data;
 import il.ac.afeka.rsocketmessagingservice.boundaries.StatusBoundary;
 import org.springframework.data.annotation.Id;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.Map;
 
@@ -11,12 +12,14 @@ public class DeviceEntity {
 	private String id;
 	private String type;
 	private String subType;
-	private Date registrationTimestamp;
-	private Date lastUpdateTimestamp;
+	private LocalDateTime registrationTimestamp;
+	private LocalDateTime lastUpdateTimestamp;
 	private String location;
 	private int manufacturerPowerInWatts;
 	private StatusEntity status;
 	private Map<String, Object> additionalAttributes;
+	private float totalActiveTime;
+
 
 	public DeviceEntity() {
 	}
@@ -45,19 +48,19 @@ public class DeviceEntity {
 		this.subType = subType;
 	}
 
-	public Date getRegistrationTimestamp() {
+	public LocalDateTime getRegistrationTimestamp() {
 		return registrationTimestamp;
 	}
 
-	public void setRegistrationTimestamp(Date registrationTimestamp) {
+	public void setRegistrationTimestamp(LocalDateTime registrationTimestamp) {
 		this.registrationTimestamp = registrationTimestamp;
 	}
 
-	public Date getLastUpdateTimestamp() {
+	public LocalDateTime getLastUpdateTimestamp() {
 		return lastUpdateTimestamp;
 	}
 
-	public void setLastUpdateTimestamp(Date lastUpdateTimestamp) {
+	public void setLastUpdateTimestamp(LocalDateTime lastUpdateTimestamp) {
 		this.lastUpdateTimestamp = lastUpdateTimestamp;
 	}
 
@@ -93,6 +96,14 @@ public class DeviceEntity {
 		this.additionalAttributes = additionalAttributes;
 	}
 
+	public float getTotalActiveTime() {
+		return totalActiveTime;
+	}
+
+	public void setTotalActiveTime(float totalActiveTime) {
+		this.totalActiveTime = totalActiveTime;
+	}
+
 	@Override
 	public String toString() {
 		return "DeviceEntity{" +
@@ -105,6 +116,7 @@ public class DeviceEntity {
 				", manufacturerPowerInWatts=" + manufacturerPowerInWatts +
 				", status=" + status +
 				", additionalAttributes=" + additionalAttributes +
+				", totalActiveTime=" + totalActiveTime +
 				'}';
 	}
 }
