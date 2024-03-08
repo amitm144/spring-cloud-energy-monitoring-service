@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import il.ac.afeka.rsocketmessagingservice.logic.DeviceNotificationService;
-import il.ac.afeka.rsocketmessagingservice.logic.EnergyConsumptionsService;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -48,4 +47,5 @@ public class MessageListener {
 			}
 		};
 	}
+
 }
