@@ -8,8 +8,10 @@ import il.ac.afeka.rsocketmessagingservice.logic.EnergyConsumptionServiceImp;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import reactor.core.publisher.Mono;
 
 import java.util.function.Consumer;
 
@@ -17,8 +19,15 @@ import java.util.function.Consumer;
 public class KafkaMessageHandler {
 	private ObjectMapper jackson;
 	private EnergyConsumptionService energyConsumptionService;
-
 	private Log logger = LogFactory.getLog(KafkaMessageHandler.class);
+	private final StreamBridge kafka;
+
+	@Value("${target.topic.name:topic1}")
+	private String targetTopic;
+	@Value("${target.topic.name:anyTopic}")
+	public void setTargetTopic(String targetTopic) {
+		this.targetTopic = targetTopic;
+	}
 
 	public KafkaMessageHandler(EnergyConsumptionService energyConsumptionService) {
 		this.energyConsumptionService = energyConsumptionService;
@@ -46,6 +55,18 @@ public class KafkaMessageHandler {
 				this.logger.error(e);
 			}
 		};
+	}
+	// Send message to Kafka
+	public Mono<Void> sendMessageToKafka(MessageBoundary message) {
+		try {
+			String messageToKafka = this.jackson.writeValueAsString(message);
+			kafka.send(A, message);
+			logger.info("Sent message to Kafka: {}", messageToKafka);
+		} catch (Exception e) {
+			logger.error("Error sending message: {}", e.getMessage());
+		}
+
+		return Mono.empty();
 	}
 
 }
