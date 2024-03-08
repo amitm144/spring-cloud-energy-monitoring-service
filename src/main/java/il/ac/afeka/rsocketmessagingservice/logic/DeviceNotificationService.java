@@ -9,5 +9,6 @@ public interface DeviceNotificationService  {
 	Mono<MessageBoundary> send(MessageBoundary messageBoundary);
 	Mono<DeviceBoundary> storeDeviceNotificationMessage(DeviceBoundary deviceBoundary);
 	Flux<DeviceBoundary> getAllDevicesNotificationMessages();
+
 	Mono<Void> cleanup();
 }

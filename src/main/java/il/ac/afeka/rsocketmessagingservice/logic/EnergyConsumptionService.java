@@ -2,24 +2,33 @@ package il.ac.afeka.rsocketmessagingservice.logic;
 
 import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
+import il.ac.afeka.rsocketmessagingservice.data.DeviceEntity;
+import il.ac.afeka.rsocketmessagingservice.data.MessageEntity;
 import il.ac.afeka.rsocketmessagingservice.repositories.EnergyMonitoringRepository;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.Month;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
 public class EnergyConsumptionService implements EnergyConsumptionsService {
     private final EnergyMonitoringRepository energyMonitoringRepository;
+    private final DeviceNotificationService deviceNotificationService;
 
-    public EnergyConsumptionService(EnergyMonitoringRepository energyMonitoringRepository) {
+
+    public EnergyConsumptionService(EnergyMonitoringRepository energyMonitoringRepository, DeviceNotificationService deviceNotificationService) {
         this.energyMonitoringRepository = energyMonitoringRepository;
-    }
-
-    @Override
-    public Mono<MessageBoundary> getLiveConsumption() {
-        return Mono.just(createDemoLiveConsumptionSummeryBoundary());
+        this.deviceNotificationService = deviceNotificationService;
     }
 
     @Override
@@ -28,82 +37,66 @@ public class EnergyConsumptionService implements EnergyConsumptionsService {
     }
 
     @Override
-    public Flux<MessageBoundary> getLiveConsumptionSummery() {
-        MessageBoundary liveConsumptionSummary = createDemoLiveConsumptionSummeryBoundary();
-        return Flux.just(liveConsumptionSummary);
+    public Mono<MessageBoundary> getLiveConsumptionSummery() {
+        Map<String, Object> summary = new HashMap<>();
+        Mono <Float> consumption = calculateTotalLiveConsumption();
+
+        summary.put("messageId:", new MessageBoundary().getMessageId());
+        summary.put("publishedTimestamp:", new Date().toString());
+        summary.put("messageType:", "liveConsumptionSummary");
+        summary.put("summary:", "Your house is currently consuming" + consumption +"W/h.");
+        Map<String, Object> messageDetails = new HashMap<>();
+        messageDetails.put("current consumption:", consumption);
+        summary.put("messageDetails:", messageDetails);
+        return Mono.just(new MessageBoundary(summary));
+
     }
 
     @Override
-    public Flux<MessageBoundary> getConsumptionSummaryByDay(Date day) {
-        MessageBoundary summary = createDemoLiveConsumptionSummeryBoundary();
-        summary.setPublishedTimestamp(day);
-        summary.setMessageType("consumptionSummary");
+    public Mono<MessageEntity> getDailySummary(LocalDateTime date) {
+        // Get current date
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+        String publishedTimestamp = now.format(formatter);
 
-        return Flux.just(summary);
+        // Calculate total consumption for the specified day
+        Mono <Float> totalConsumption = calculateConsumptionForDay(date);
+
+        // Construct the summary message
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("messageId:", new MessageBoundary().getMessageId());
+        summary.put("publishedTimestamp:", publishedTimestamp);
+        summary.put("messageType:", "dailyConsumptionSummary");
+        summary.put("summary:", "Your house consumed " + totalConsumption + " W/h on " + date.toString());
+        Map<String, Object> messageDetails = new HashMap<>();
+        messageDetails.put("consumption:", totalConsumption);
+        summary.put("messageDetails:", messageDetails);
+
+        return Mono.just(new MessageBoundary(summary)).log();
     }
 
     @Override
-    public Flux<MessageBoundary> getConsumptionSummaryByMonth(Date date) {
-        MessageBoundary summary = createDemoLiveConsumptionSummeryBoundary();
-        summary.setPublishedTimestamp(date);
-        summary.setMessageType("consumptionSummary");
+    public Mono<MessageBoundary> getConsumptionSummaryByMonth(LocalDateTime date) {
+        // Get current date
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+        String publishedTimestamp = now.format(formatter);
 
-        return Flux.just(summary);
-    }
+        // Calculate total consumption for the specified month
+        float totalConsumption = calculateMonthlyConsumptionForDate(date);
 
-    private MessageBoundary createDemoLiveConsumptionSummeryBoundary() {
-        // Create a new MessageBoundary object with the demo data
-        MessageBoundary liveConsumptionSummary = new MessageBoundary();
-        liveConsumptionSummary.setMessageId("12345");
-        liveConsumptionSummary.setPublishedTimestamp(new Date());
-        liveConsumptionSummary.setMessageType("liveConsumptionSummary");
-        liveConsumptionSummary.setSummary("Your house is currently consuming 5kW/h.");
+        // Construct the summary message
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("messageId", new MessageBoundary().getMessageId());
+        summary.put("publishedTimestamp", publishedTimestamp);
+        summary.put("messageType", "monthlyConsumptionSummary");
+        summary.put("summary", "Your house consumed " + totalConsumption + " W/h in " + Month.of(date.getMonth()) + " " + date.getYear());
+        Map<String, Object> messageDetails = new HashMap<>();
+        messageDetails.put("consumption", totalConsumption);
+        summary.put("messageDetails", messageDetails);
 
-        // Set external references
-        ExternalReferenceBoundary externalReference = new ExternalReferenceBoundary();
-        externalReference.setExternalServiceId("0");
-        externalReference.setService("EnergyServiceProvider");
-        Set<ExternalReferenceBoundary> refs = new HashSet<>();
-        refs.add(externalReference);
-        liveConsumptionSummary.setExternalReferences(refs);
-
-        // Set message details including consumption by room
-        HashMap<String, Object> details = new HashMap<>();
-        details.put("houseId", -1);
-        double totalConsumption = 5.0;
-        details.put("Consumption", totalConsumption);
-
-        // Prepare room consumption details
-        List<HashMap<String, Object>> roomsConsumption = new ArrayList<>();
-        Random random = new Random();
-        double remainingConsumption = totalConsumption;
-
-        // Define room names
-        String[] roomNames = {"Living Room", "Kitchen", "Bedroom", "Bathroom"};
-        for (int i = 0; i < roomNames.length; i++) {
-            HashMap<String, Object> room = new HashMap<>();
-            room.put("roomId", "room" + (i + 1));
-            room.put("roomName", roomNames[i]);
-
-            // Randomize consumption for each room, ensuring the last room adjusts to match the total
-            double consumption;
-            if (i < roomNames.length - 1) {
-                consumption = Math.round(random.nextDouble() * (remainingConsumption - (roomNames.length - i - 1)) * 100.0) / 100.0;
-                remainingConsumption -= consumption;
-            } else {
-                consumption = Math.round(remainingConsumption * 100.0) / 100.0; // Adjust the last room's consumption to match exactly
-            }
-
-            room.put("consumption", consumption);
-            roomsConsumption.add(room);
-        }
-
-        // Add the list of rooms to the details HashMap
-        details.put("consumptionByRoom", roomsConsumption);
-
-        // Set the details in the liveConsumptionSummary object
-        liveConsumptionSummary.setMessageDetails(details);
-        return liveConsumptionSummary;
+        // Return the summary message in a Flux
+        return Mono.just(new MessageBoundary(summary)).log();
     }
 
     public Flux<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption) {
@@ -153,5 +146,40 @@ public class EnergyConsumptionService implements EnergyConsumptionsService {
         consumptionWarning.setMessageDetails(details);
 
         return Flux.just(consumptionWarning);
+    }
+
+    public Mono<Float> calculateTotalLiveConsumption () {
+        return deviceNotificationService.getAllDevicesNotificationMessages()
+                .filter(device -> device.getStatus().isOn()) // Filter devices with status = true
+                .map(d -> d.getStatus().getCurrentPowerInWatts()) // Map each device to its consumption
+                .reduce(0.0f,Float::sum); // Sum up all the consumptions
+    }
+
+    public Mono<Float> calculateConsumptionForDay(LocalDateTime date) {
+        LocalDateTime startDate = date.atStartOfDay()
+                .withHour(0)
+                .withMinute(1)
+                .withSecond(0);
+
+        LocalDateTime endDate = date.atTime(23, 59, 59);
+
+        List <DeviceEntity> devices = this.DeviceNotificationRepository
+                .findAllByRegistrationTimestampAfterAndLastUpdateTimestampBefore
+                        (startDate,endDate); //need to check
+
+        Float total = devices.stream()
+                .map(d -> d.getStatus().getCurrentPowerInWatts()* d.getTotalActiveTime()) // Map each device to its consumption
+                .reduce(0.0f, Float::sum);
+
+        Float totalOn = devices.stream().
+                filter(device -> device.getStatus().isOn()) // Filter devices with status = true
+                .map(d -> d.getManufacturerPowerInWatts()* (new Date().getTime() - (float)d.getLastUpdateTimestamp().getTime())/360000)
+                .reduce(0.0f,Float::sum);
+
+        return Mono.just(totalOn+total);
+    }
+
+    public float calculateMonthlyConsumptionForDate(Date date) {
+
     }
 }

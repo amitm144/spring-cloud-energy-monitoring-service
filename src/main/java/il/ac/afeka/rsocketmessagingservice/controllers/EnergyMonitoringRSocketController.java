@@ -24,14 +24,21 @@ public class EnergyMonitoringRSocketController {
     @MessageMapping("${app.rsocket.event.consumption.live}")
     public Mono<MessageBoundary> publishLiveConsumption() {
         this.logger.debug("live consumption request received");
-        return energyService.getLiveConsumption();
+        return energyService.getLiveConsumptionSummery();
     }
 
     @MessageMapping("${app.rsocket.event.consumption.summary}")
-    public Flux<MessageBoundary> publishConsumptionSummery() {
+    public Mono<MessageBoundary> publishConsumptionSummeryByDay() {
         // TODO: change to daily and monthly kafka event
         this.logger.debug("publishing consumption summary");
-        return energyService.getConsumptionSummaryByDay(new Date());
+        return energyService.getDailySummary(new Date());
+    }
+
+    @MessageMapping("${app.rsocket.event.consumption.summary}")
+    public Mono<MessageBoundary> publishConsumptionSummeryByMonth() {
+        // TODO: change to daily and monthly kafka event
+        this.logger.debug("publishing consumption summary");
+        return energyService.getConsumptionSummaryByMonth(new Date());
     }
 
     @MessageMapping("${app.rsocket.event.consumption.warning}")
