@@ -53,7 +53,7 @@ public class EnergyConsumptionService implements EnergyConsumptionsService {
     }
 
     @Override
-    public Mono<MessageEntity> getDailySummary(LocalDateTime date) {
+    public Mono<MessageBoundary> getDailySummary(LocalDateTime date) {
         // Get current date
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");

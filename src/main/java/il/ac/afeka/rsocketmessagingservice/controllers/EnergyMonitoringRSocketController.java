@@ -31,7 +31,7 @@ public class EnergyMonitoringRSocketController {
     public Mono<MessageBoundary> publishConsumptionSummeryByDay() {
         // TODO: change to daily and monthly kafka event
         this.logger.debug("publishing consumption summary");
-        return energyService.getDailySummary(new Date());
+        return energyService.getDailySummary(new LocalDateTime());
     }
 
     @MessageMapping("${app.rsocket.event.consumption.summary}")
