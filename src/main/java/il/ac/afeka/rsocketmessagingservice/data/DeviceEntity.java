@@ -17,6 +17,8 @@ public class DeviceEntity {
 	private int manufacturerPowerInWatts;
 	private StatusEntity status;
 	private Map<String, Object> additionalAttributes;
+	private float totalActiveTime;
+
 
 	public DeviceEntity() {
 	}
@@ -93,6 +95,14 @@ public class DeviceEntity {
 		this.additionalAttributes = additionalAttributes;
 	}
 
+	public float getTotalActiveTime() {
+		return totalActiveTime;
+	}
+
+	public void setTotalActiveTime(float totalActiveTime) {
+		this.totalActiveTime = totalActiveTime;
+	}
+
 	@Override
 	public String toString() {
 		return "DeviceEntity{" +
@@ -105,6 +115,7 @@ public class DeviceEntity {
 				", manufacturerPowerInWatts=" + manufacturerPowerInWatts +
 				", status=" + status +
 				", additionalAttributes=" + additionalAttributes +
+				", totalActiveTime=" + totalActiveTime +
 				'}';
 	}
 }

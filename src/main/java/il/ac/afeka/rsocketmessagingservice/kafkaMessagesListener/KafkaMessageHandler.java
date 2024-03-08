@@ -3,7 +3,8 @@ package il.ac.afeka.rsocketmessagingservice.kafkaMessagesListener;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
-import il.ac.afeka.rsocketmessagingservice.logic.DeviceNotificationService;
+import il.ac.afeka.rsocketmessagingservice.logic.EnergyConsumptionService;
+import il.ac.afeka.rsocketmessagingservice.logic.EnergyConsumptionServiceImp;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -13,13 +14,14 @@ import org.springframework.context.annotation.Configuration;
 import java.util.function.Consumer;
 
 @Configuration
-public class MessageListener {
+public class KafkaMessageHandler {
 	private ObjectMapper jackson;
-	private DeviceNotificationService deviceNotificationService;
-	private Log logger = LogFactory.getLog(MessageListener.class);
+	private EnergyConsumptionService energyConsumptionService;
 
-	public MessageListener(DeviceNotificationService deviceNotificationService) {
-		this.deviceNotificationService = deviceNotificationService;
+	private Log logger = LogFactory.getLog(KafkaMessageHandler.class);
+
+	public KafkaMessageHandler(EnergyConsumptionService energyConsumptionService) {
+		this.energyConsumptionService = energyConsumptionService;
 	}
 
 	@PostConstruct
@@ -37,9 +39,7 @@ public class MessageListener {
 
 					String deviceJson = jackson.writeValueAsString(message.getMessageDetails().get("device"));
 					DeviceBoundary deviceBoundary = jackson.readValue(deviceJson, DeviceBoundary.class);
-					DeviceBoundary storedDeviceNotificationMessage = this.deviceNotificationService
-							.storeDeviceNotificationMessage(deviceBoundary)
-							.block();
+					this.energyConsumptionService.handleDeviceEvent(deviceBoundary);
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
