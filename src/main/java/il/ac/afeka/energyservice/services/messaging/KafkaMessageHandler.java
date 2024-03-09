@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import reactor.core.publisher.Mono;
 
 import java.util.function.Consumer;
@@ -25,7 +26,7 @@ public class KafkaMessageHandler implements MessageQueueHandler {
 	private String targetTopic;
 	private Log logger = LogFactory.getLog(KafkaMessageHandler.class);
 
-	public KafkaMessageHandler(EnergyConsumptionService energyConsumptionService, StreamBridge kafkaProducer) {
+	public KafkaMessageHandler(@Lazy EnergyConsumptionService energyConsumptionService, StreamBridge kafkaProducer) {
 		this.energyConsumptionService = energyConsumptionService;
         this.kafkaProducer = kafkaProducer;
     }

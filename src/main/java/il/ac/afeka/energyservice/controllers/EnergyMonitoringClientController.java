@@ -1,6 +1,7 @@
 package il.ac.afeka.energyservice.controllers;
 
 import il.ac.afeka.energyservice.boundaries.MessageBoundary;
+import il.ac.afeka.energyservice.services.messaging.MessageQueueHandler;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 public class EnergyMonitoringClientController {
     private RSocketRequester requester;
     private RSocketRequester.Builder builder;
+    private MessageQueueHandler kafka;
     private String socketHost;
     private int socketPort;
 
@@ -31,8 +33,9 @@ public class EnergyMonitoringClientController {
     private String CONSUMPTION_SUMMARY_ROUTE;
 
     @Autowired
-    public void setBuilder(RSocketRequester.Builder builder) {
+    public void setBuilder(RSocketRequester.Builder builder, MessageQueueHandler kafka) {
         this.builder = builder;
+        this.kafka=kafka;
     }
 
     @Value("${app.rsocket.host:127.0.0.1}")
@@ -89,5 +92,9 @@ public class EnergyMonitoringClientController {
         return this.requester
                 .route(CONSUMPTION_WARNING_ROUTE)
                 .retrieveFlux(MessageBoundary.class);
+    }
+    @PostMapping(path ="/kafka/message")
+    public Mono<Void> getTestKafka(@RequestBody MessageBoundary message) {
+        return this.kafka.publish(message);
     }
 }

@@ -13,6 +13,7 @@ import jakarta.annotation.PostConstruct;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -46,8 +47,8 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     @Value("${spring.application.name}")
     private String SERVICE_NAME;
 
-    public EnergyConsumptionServiceImp(MessageQueueHandler messageHandler, DeviceDataRepository deviceDataRepository,
-                                       EnergyMonitoringRepository energyMonitoringRepository) {
+    public EnergyConsumptionServiceImp(@Lazy MessageQueueHandler messageHandler, DeviceDataRepository deviceDataRepository,
+                                        EnergyMonitoringRepository energyMonitoringRepository) {
         this.energyMonitoringRepository = energyMonitoringRepository;
         this.deviceDataRepository = deviceDataRepository;
         this.messageHandler = messageHandler;
@@ -72,7 +73,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                         this.messageHandler.publish(summary);
                     }
                 }
-            } catch (InterruptedException e) {
+            } catch (Exception e) {
                 // If the thread is interrupted, log the exception
                 Thread.currentThread().interrupt();
                 this.logger.error("Thread "
