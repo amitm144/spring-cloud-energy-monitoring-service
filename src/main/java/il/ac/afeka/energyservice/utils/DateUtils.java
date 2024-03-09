@@ -1,9 +1,12 @@
 package il.ac.afeka.energyservice.utils;
 
+import org.springframework.cglib.core.Local;
+
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.util.Date;
@@ -30,21 +33,25 @@ public class DateUtils {
         }
     }
 
-    public static boolean isValidDate(String date, String dateFormatString) {
+    public static boolean isValidDate(String inputDate, String dateFormatString) {
         DateFormat dateFormat = new SimpleDateFormat(dateFormatString);
         dateFormat.setLenient(false); // Strict parsing
 
         try {
             // Attempt to parse the date against the given format string
-            dateFormat.parse(dateFormat.format(date));
-            return true; // Date is valid according to the format
-        } catch (ParseException e) {
+            Date date = dateFormat.parse(inputDate);
+            return inputDate.equals(dateFormat.format(date));
+        } catch (ParseException | NullPointerException e) {
             return false; // Date is invalid according to the format
         }
     }
 
     public static LocalDate parseDate(String date) {
         return LocalDate.parse(date, format);
+    }
+
+    public static LocalDate parseDate(String date, String dateFormatString) {
+        return LocalDate.parse(date, DateTimeFormatter.ofPattern(dateFormatString));
     }
 
     public static String toValidDateString(LocalDate date) {

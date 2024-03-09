@@ -2,6 +2,7 @@ package il.ac.afeka.energyservice.controllers;
 
 import il.ac.afeka.energyservice.boundaries.MessageBoundary;
 import il.ac.afeka.energyservice.services.messaging.MessageQueueHandler;
+import il.ac.afeka.energyservice.utils.DateUtils;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +14,9 @@ import reactor.core.publisher.Mono;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.Temporal;
+import java.util.Date;
 
 @RestController
 @RequestMapping(path = "/energy")
@@ -29,8 +33,10 @@ public class EnergyMonitoringClientController {
     private String CONSUMPTION_WARNING_ROUTE;
     @Value("${app.rsocket.event.consumption.live}")
     private String LIVE_CONSUMPTION_ROUTE;
-    @Value("${app.rsocket.event.consumption.summary}")
-    private String CONSUMPTION_SUMMARY_ROUTE;
+    @Value("${app.rsocket.event.consumption.summary.monthly}")
+    private String MONTHLY_CONSUMPTION_SUMMARY_ROUTE;
+    @Value("${app.rsocket.event.consumption.summary.daily}")
+    private String DAILY_CONSUMPTION_SUMMARY_ROUTE;
 
     @Autowired
     public void setBuilder(RSocketRequester.Builder builder, MessageQueueHandler kafka) {
@@ -61,23 +67,31 @@ public class EnergyMonitoringClientController {
     }
 
     @GetMapping("/summary/daily")
-    public Flux<MessageBoundary> getDailyConsumptionSummary(@RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
+    public Mono<MessageBoundary> getDailyConsumptionSummary(@RequestParam String date) {
+        if (!DateUtils.isValidDate(date, "yyyy-MM-dd"))
+            return Mono.error(new RuntimeException("Invalid date provided"));
+
         return this.requester
-                .route(CONSUMPTION_SUMMARY_ROUTE)
+                .route(DAILY_CONSUMPTION_SUMMARY_ROUTE)
                 .data(date)
-                .retrieveFlux(MessageBoundary.class);
+                .retrieveMono(MessageBoundary.class);
     }
 
     @GetMapping("/summary/monthly")
-    public Flux<MessageBoundary> getMonthlyConsumptionSummary(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") LocalDate date) {
-        LocalDate todayFormatted = LocalDate.parse(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM")));
-        if (todayFormatted.isBefore(date))
-            return Flux.error(new RuntimeException("Invalid Date provided"));
+    public Mono<MessageBoundary> getMonthlyConsumptionSummary(@RequestParam String date) {
+        try {
+            LocalDate parsedDate = DateUtils.parseDate(date, "yyyy-MM-dd").withDayOfMonth(1);
+            if (parsedDate.isAfter(LocalDate.now())) {
+                return Mono.error(new RuntimeException("Invalid date provided"));
+            }
 
-        return this.requester
-                .route(CONSUMPTION_SUMMARY_ROUTE)
-                .data(date)
-                .retrieveFlux(MessageBoundary.class);
+            return this.requester
+                    .route(MONTHLY_CONSUMPTION_SUMMARY_ROUTE)
+                    .data(date)
+                    .retrieveMono(MessageBoundary.class);
+        } catch (DateTimeParseException e) {
+            return Mono.error(new RuntimeException("Invalid date provided"));
+        }
     }
 
     @GetMapping(path ="/warning/overcurrent")

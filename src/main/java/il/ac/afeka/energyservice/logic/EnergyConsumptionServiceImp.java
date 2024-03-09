@@ -63,27 +63,27 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                 while(true) {
                     // Sleep until midnight
                     TimeUnit.MILLISECONDS.sleep(sleepTime);
-                    // Generate daily summary
-                    MessageBoundary summary = generateDailySummary(LocalDate.now());
-                    // issue daily consumption summary
-                    this.messageHandler.publish(summary);
-                    // Generate monthly summary if needed and issue it
+                    // Generate daily summary and issue to message queue
+                    generateDailySummary(LocalDate.now())
+                            .subscribe(this.messageHandler::publish);
+
+                    // Generate monthly summary if needed and issue to message queue
                     if (isLastDayOfMonth()) {
-                        summary = generateMonthlySummary(LocalDateTime.now());
-                        this.messageHandler.publish(summary);
+                        generateMonthlySummary(LocalDate.now())
+                                .subscribe(this.messageHandler::publish);
                     }
                 }
             } catch (Exception e) {
                 // If the thread is interrupted, log the exception
                 Thread.currentThread().interrupt();
                 this.logger.error("Thread "
-                        + Thread.currentThread().getId()
+                        + Thread.currentThread().threadId()
                         + " was interrupted, failed to complete operation: "
                         + e.getMessage()
                 );
             }
             // Code to be executed after waking up
-            this.logger.debug(LocalDateTime.now() + " : thread id " + Thread.currentThread().getId() + " woke up");
+            this.logger.debug(LocalDateTime.now() + " : thread id " + Thread.currentThread().threadId() + " woke up");
         });
     }
 
@@ -115,13 +115,13 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     }
 
     @Override
-    public Mono<MessageBoundary> getDailyConsumptionSummary(LocalDateTime date) {
-        return Mono.just(generateDailySummary(date));
+    public Mono<MessageBoundary> getDailyConsumptionSummary(LocalDate date) {
+        return generateDailySummary(date);
     }
 
     @Override
-    public Mono<MessageBoundary> getMonthlyConsumptionSummary(LocalDateTime date) {
-        return Mono.just(this.generateMonthlySummary(date));
+    public Mono<MessageBoundary> getMonthlyConsumptionSummary(LocalDate date) {
+        return this.generateMonthlySummary(date);
     }
 
     @Override
@@ -204,23 +204,50 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return new MessageBoundary(consumptionWarning);
     }
 
-    private MessageBoundary generateDailySummary(LocalDate date) {
+    private Mono<MessageBoundary> generateDailySummary(LocalDate date) {
         LocalDateTime startOfDay = date.atStartOfDay();
         LocalDateTime endOfDay = LocalDateTime.of(date, LocalTime.MAX);
         Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startOfDay, endOfDay);
 
-        devices.filter(device -> device.getStatus().isOn())
+        Flux<DeviceEntity> onDevices = devices.filter(device -> device.getStatus().isOn())
             .map(device-> {
                 float remainingTimeOnInHours = Duration.between(device.getLastUpdateTimestamp(), LocalDateTime.now()).toHours();
                 device.setTotalActiveTime(device.getTotalActiveTime() + remainingTimeOnInHours);
                 return device;
             });
 
-        LocalDateTime now = LocalDateTime.now();
-        MessageBoundary dailySummary = generateDailySummary(now);
-        devices.map(device -> {
+        Mono<Float> totalConsumptionMono = calculateConsumptionForDay(date);
+        Mono<Float> expectedBillMono = totalConsumptionMono.map(ConsumptionCalculator::calculateEstimatedPrice);
+
+        Mono<MessageBoundary> dailySummary = totalConsumptionMono
+                .zipWith(expectedBillMono)
+                .flatMap(tuple -> {
+                    Float totalConsumption = tuple.getT1();
+                    Float expectedBill = tuple.getT2();
+
+                    MessageEntity summary = new MessageEntity();
+                    summary.setMessageType("dailyConsumptionSummary");
+                    summary.setPublishedTimestamp(LocalDateTime.now());
+                    summary.setSummary("Your total power consumption for today is " + totalConsumption + "W");
+
+                    // Set external references
+                    ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
+                    Set<ExternalReferenceEntity> refs = new HashSet<>();
+                    refs.add(externalReference);
+                    summary.setExternalReferences(refs);
+
+                    Map<String, Object> messageDetails = new HashMap<>();
+                    messageDetails.put("totalConsumption:", totalConsumption);
+                    messageDetails.put("expectedBill:", expectedBill);
+                    summary.setMessageDetails(messageDetails);
+
+                    return this.energyMonitoringRepository.save(summary);
+                })
+                .map(MessageBoundary::new);
+
+        onDevices.map(device -> {
                 device.setTotalActiveTime(0);
-                device.setLastUpdateTimestamp(now);
+                device.setLastUpdateTimestamp(LocalDateTime.now());
                 return device;
             })
             .map(deviceDataRepository::save);
@@ -228,32 +255,35 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return dailySummary;
     }
 
-    private MessageBoundary generateMonthlySummary(LocalDateTime date) {
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
-        String publishedTimestamp = date.format(formatter);
+    private Mono<MessageBoundary> generateMonthlySummary(LocalDate date) {
+        // Calculate total consumption for the specified month
+        Mono<Float> totalConsumptionMono = calculateConsumptionForMonth(date);
+        Mono<Float> expectedBillMono = totalConsumptionMono.map(ConsumptionCalculator::calculateEstimatedPrice);
 
-        // Calculate total consumption for the specified day
-        Mono<Float> totalConsumption = calculateConsumptionForMonth(date);
-        Mono<Float> expectedBill = totalConsumption.map(ConsumptionCalculator::calculateEstimatedPrice);
+        return totalConsumptionMono.zipWith(expectedBillMono)
+                .flatMap(tuple -> {
+                    Float totalConsumption = tuple.getT1();
+                    Float expectedBill = tuple.getT2();
 
-        MessageEntity summary = new MessageEntity();
-        summary.setMessageType("monthConsumptionSummary");
-        summary.setPublishedTimestamp(date);
-        summary.setSummary("Your house consumed " + totalConsumption + " W/h on this month is" + date.getMonth().toString());
+                    MessageEntity summary = new MessageEntity();
+                    summary.setMessageType("monthlyConsumptionSummary");
+                    summary.setPublishedTimestamp(LocalDateTime.now());
+                    summary.setSummary("Your total power consumption for " + date.getMonth() + " is " + totalConsumption + "W");
 
-        // Set external references
-        ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
-        Set<ExternalReferenceEntity> refs = new HashSet<>();
-        refs.add(externalReference);
-        summary.setExternalReferences(refs);
+                    // Set external references
+                    ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
+                    Set<ExternalReferenceEntity> refs = new HashSet<>();
+                    refs.add(externalReference);
+                    summary.setExternalReferences(refs);
 
-        Map<String, Object> messageDetails = new HashMap<>();
-        messageDetails.put("totalConsumption:", totalConsumption);
-        messageDetails.put("expectedBill:", expectedBill);
-        summary.setMessageDetails(messageDetails);
+                    Map<String, Object> messageDetails = new HashMap<>();
+                    messageDetails.put("totalConsumption", totalConsumption);
+                    messageDetails.put("expectedBill", expectedBill);
+                    summary.setMessageDetails(messageDetails);
 
-        this.energyMonitoringRepository.save(summary);
-        return new MessageBoundary(summary);
+                    return energyMonitoringRepository.save(summary);
+                })
+                .map(MessageBoundary::new);
     }
 
     private MessageBoundary generateLiveSummary() {
@@ -279,32 +309,35 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return new MessageBoundary(summary);
     }
 
-    private MessageBoundary generateDailySummary(LocalDateTime date) {
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
-        String publishedTimestamp = date.format(formatter);
-
+    private Mono<MessageBoundary> createDailySummary(LocalDate date) {
         // Calculate total consumption for the specified day
-        Mono<Float> totalConsumption = calculateConsumptionForDay(date);
-        Mono<Float> expectedBill = totalConsumption.map(ConsumptionCalculator::calculateEstimatedPrice);
+        Mono<Float> totalConsumptionMono = calculateConsumptionForDay(date);
+        Mono<Float> expectedBillMono = totalConsumptionMono.map(ConsumptionCalculator::calculateEstimatedPrice);
 
-        MessageEntity summary = new MessageEntity();
-        summary.setMessageType("dailyConsumptionSummary");
-        summary.setPublishedTimestamp(date);
-        summary.setSummary("Your house consumed " + totalConsumption + " W/h on " + date.toString());
+        return totalConsumptionMono.zipWith(expectedBillMono)
+                .flatMap(tuple -> {
+                    Float totalConsumption = tuple.getT1();
+                    Float expectedBill = tuple.getT2();
 
-        // Set external references
-        ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
-        Set<ExternalReferenceEntity> refs = new HashSet<>();
-        refs.add(externalReference);
-        summary.setExternalReferences(refs);
+                    MessageEntity summary = new MessageEntity();
+                    summary.setMessageType("dailyConsumptionSummary");
+                    summary.setPublishedTimestamp(LocalDateTime.now());
+                    summary.setSummary("Your total power consumption for today is " + totalConsumption + "W");
 
-        Map<String, Object> messageDetails = new HashMap<>();
-        messageDetails.put("totalConsumption:", totalConsumption);
-        messageDetails.put("expectedBill:", expectedBill);
-        summary.setMessageDetails(messageDetails);
+                    // Set external references
+                    ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
+                    Set<ExternalReferenceEntity> refs = new HashSet<>();
+                    refs.add(externalReference);
+                    summary.setExternalReferences(refs);
 
-        this.energyMonitoringRepository.save(summary);
-        return new MessageBoundary(summary);
+                    Map<String, Object> messageDetails = new HashMap<>();
+                    messageDetails.put("totalConsumption:", totalConsumption);
+                    messageDetails.put("expectedBill:", expectedBill);
+                    summary.setMessageDetails(messageDetails);
+
+                    return this.energyMonitoringRepository.save(summary);
+                })
+                .map(MessageBoundary::new);
     }
 
     public Mono<Float> calculateTotalLiveConsumption () {
@@ -327,17 +360,17 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return Duration.between(now, nextMidnight).toMillis();
     }
 
-    private Mono<Float> calculateConsumptionForDay(LocalDateTime date) {
-        LocalDateTime startDate = date.toLocalDate().atStartOfDay();
-        LocalDateTime endDate = date.toLocalDate().atTime(23, 59, 59);
+    private Mono<Float> calculateConsumptionForDay(LocalDate date) {
+        LocalDateTime startDate = date.atStartOfDay();
+        LocalDateTime endDate = date.atTime(23, 59, 59);
 
         Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startDate,endDate);
         return ConsumptionCalculator.calculateTotalConsumption(devices);
     }
 
-    private Mono<Float> calculateConsumptionForMonth(LocalDateTime date) {
-        LocalDateTime firstDayOfMonth = date.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
-        LocalDateTime lastDayOfMonth = date.with(TemporalAdjusters.lastDayOfMonth()).withHour(23).withMinute(59).withSecond(59);
+    private Mono<Float> calculateConsumptionForMonth(LocalDate date) {
+        LocalDateTime firstDayOfMonth = date.withDayOfMonth(1).atStartOfDay();
+        LocalDateTime lastDayOfMonth = date.with(TemporalAdjusters.lastDayOfMonth()).atTime(23, 59, 59);
 
         Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(firstDayOfMonth,lastDayOfMonth);
         return ConsumptionCalculator.calculateTotalConsumption(devices);

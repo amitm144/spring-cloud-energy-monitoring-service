@@ -1,5 +1,6 @@
 package il.ac.afeka.energyservice.controllers;
 
+import il.ac.afeka.energyservice.boundaries.DeviceBoundary;
 import il.ac.afeka.energyservice.boundaries.MessageBoundary;
 import il.ac.afeka.energyservice.logic.EnergyConsumptionService;
 import il.ac.afeka.energyservice.utils.DateUtils;
@@ -11,7 +12,10 @@ import org.springframework.stereotype.Controller;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 @Controller
 public class EnergyMonitoringRSocketController {
@@ -21,21 +25,43 @@ public class EnergyMonitoringRSocketController {
     @Autowired
     public void setEnergyService(EnergyConsumptionService energyService) { this.energyService = energyService; }
 
+    @MessageMapping("${app.rsocket.event.device}")
+    public Mono<Void> handleDeviceEvent(DeviceBoundary event) {
+        return this.energyService.handleDeviceEvent(event);
+    }
+
     @MessageMapping("${app.rsocket.event.consumption.live}")
     public Mono<MessageBoundary> publishLiveConsumption() {
         this.logger.debug("live consumption request received");
         return energyService.getLiveConsumptionSummary();
     }
 
-    @MessageMapping("${app.rsocket.event.consumption.summary}")
-    public Mono<MessageBoundary> publishConsumptionSummery(LocalDateTime date) {
-        if (DateUtils.isValidDate(date.toLocalDate().toString(), "yyyy-MM")) {
-            this.logger.debug("publishing monthly consumption summary");
-            date = LocalDateTime.of(date.getYear(), date.getMonth(), 1, 0, 0);
-            return energyService.getMonthlyConsumptionSummary(date);
+    @MessageMapping("${app.rsocket.event.consumption.summary.daily}")
+    public Mono<MessageBoundary> getDailyConsumptionSummery(String date) {
+        try {
+            LocalDate parsedDate = DateUtils.parseDate(date, "yyyy-MM-dd");
+            if (parsedDate.isAfter(LocalDate.now())) {
+                return Mono.error(new RuntimeException("Invalid date provided"));
+            }
+            this.logger.debug("publishing daily consumption summary");
+            return energyService.getDailyConsumptionSummary(parsedDate);
+        } catch (DateTimeParseException e) {
+            return Mono.error(new RuntimeException("Invalid date provided"));
         }
-        this.logger.debug("publishing daily consumption summary");
-        return energyService.getDailyConsumptionSummary(date);
+    }
+
+    @MessageMapping("${app.rsocket.event.consumption.summary.monthly}")
+    public Mono<MessageBoundary> getMonthlyConsumptionSummery(String date) {
+        try {
+            LocalDate parsedDate = DateUtils.parseDate(date, "yyyy-MM-dd");
+            if (parsedDate.isAfter(LocalDate.now())) {
+                return Mono.error(new RuntimeException("Invalid date provided"));
+            }
+            this.logger.debug("publishing monthly consumption summary");
+            return energyService.getMonthlyConsumptionSummary(parsedDate);
+        } catch (DateTimeParseException e) {
+            return Mono.error(new RuntimeException("Invalid date provided"));
+        }
     }
 
     @MessageMapping("${app.rsocket.event.consumption.warning}")
