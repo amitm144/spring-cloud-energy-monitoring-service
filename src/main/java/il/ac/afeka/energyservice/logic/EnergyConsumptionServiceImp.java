@@ -347,4 +347,22 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         externalReference.setService(SERVICE_NAME);
         return externalReference;
     }
+
+    private Mono<List<Float>> getLastThreeMonthConsumption(LocalDate date) {
+        List<Mono<Float>> historicalConsumptionMonos = new ArrayList<>();
+        for (int i = 1; i <= 3; i++) {
+            LocalDate historicalDate = date.minusMonths(i);
+            Mono<Float> historicalTotalConsumption = calculateConsumptionForMonth(historicalDate);
+            historicalConsumptionMonos.add(historicalTotalConsumption);
+        }
+        return Mono.zip(historicalConsumptionMonos, objects -> {
+            List<Float> historicalConsumption = new ArrayList<>();
+            for (Object obj : objects) {
+                Float value = (Float) obj;
+                historicalConsumption.add(value != null ? value : 0.0f);
+            }
+            return historicalConsumption;
+        });
+    }
+
 }
