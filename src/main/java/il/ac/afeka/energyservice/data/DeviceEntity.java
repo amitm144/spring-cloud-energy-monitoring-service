@@ -13,7 +13,7 @@ public class DeviceEntity {
 	private LocalDateTime registrationTimestamp;
 	private LocalDateTime lastUpdateTimestamp;
 	private String location;
-	private int manufacturerPowerInWatts;
+	private float manufacturerPowerInWatts;
 	private StatusEntity status;
 	private Map<String, Object> additionalAttributes;
 	private float totalActiveTime;
@@ -70,11 +70,11 @@ public class DeviceEntity {
 		this.location = location;
 	}
 
-	public int getManufacturerPowerInWatts() {
+	public float getManufacturerPowerInWatts() {
 		return manufacturerPowerInWatts;
 	}
 
-	public void setManufacturerPowerInWatts(int manufacturerPowerInWatts) {
+	public void setManufacturerPowerInWatts(float manufacturerPowerInWatts) {
 		this.manufacturerPowerInWatts = manufacturerPowerInWatts;
 	}
 

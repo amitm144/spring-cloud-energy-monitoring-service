@@ -14,7 +14,7 @@ public class StatusEntity {
 		return isOn;
 	}
 
-	public void setOn(boolean on) {
+	public void setIsOn(boolean on) {
 		isOn = on;
 	}
 

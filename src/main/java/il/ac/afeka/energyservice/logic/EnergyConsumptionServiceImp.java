@@ -151,7 +151,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
 
     @Override
     public void checkForOverConsumption() {
-        float consumptionInWatts = (float) this.generateLiveSummary().getMessageDetails().getOrDefault("consumption", 0);
+        float consumptionInWatts = (float) this.generateLiveSummary().getMessageDetails().getOrDefault("consumption", 0f);
         if (consumptionInWatts >= OVERCONSUMPTION_LIMIT) {
             MessageBoundary overConsumptionMessage = generateConsumptionWarning(consumptionInWatts);
             this.messageHandler.publish(overConsumptionMessage);
@@ -259,7 +259,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     private MessageBoundary generateLiveSummary() {
         //TODO the function need to get also the list of location that we also write in the summary the consumption according the location.
         MessageEntity summary = new MessageEntity();
-        Mono <Float> totalConsumption = calculateTotalLiveConsumption();
+        Mono<Float> totalConsumption = calculateTotalLiveConsumption();
 
         summary.setPublishedTimestamp(LocalDateTime.now());
         summary.setMessageType("dailyConsumptionSummary");

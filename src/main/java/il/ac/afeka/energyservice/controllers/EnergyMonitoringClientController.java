@@ -59,6 +59,7 @@ public class EnergyMonitoringClientController {
                 .route(LIVE_CONSUMPTION_ROUTE)
                 .retrieveMono(MessageBoundary.class);
     }
+
     @GetMapping("/summary/daily")
     public Flux<MessageBoundary> getDailyConsumptionSummary(@RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
         return this.requester
@@ -79,7 +80,6 @@ public class EnergyMonitoringClientController {
                 .retrieveFlux(MessageBoundary.class);
     }
 
-
     @GetMapping(path ="/warning/overcurrent")
     public Flux<MessageBoundary> getAllOverCurrentWarningEvents() {
         return this.requester
@@ -93,6 +93,7 @@ public class EnergyMonitoringClientController {
                 .route(CONSUMPTION_WARNING_ROUTE)
                 .retrieveFlux(MessageBoundary.class);
     }
+
     @PostMapping(path ="/kafka/message")
     public Mono<Void> getTestKafka(@RequestBody MessageBoundary message) {
         return this.kafka.publish(message);

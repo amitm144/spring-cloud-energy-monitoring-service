@@ -30,7 +30,7 @@ public class StatusBoundary {
 
 	public StatusEntity toEntity() {
 		StatusEntity rv = new StatusEntity();
-		rv.setOn(isOn());
+		rv.setIsOn(isOn());
 		rv.setBrightness(getBrightness());
 		rv.setColorRGB(getColorRGB());
 		rv.setCurrentPowerInWatts(getCurrentPowerInWatts());
@@ -41,7 +41,7 @@ public class StatusBoundary {
 		return isOn;
 	}
 
-	public void setOn(boolean on) {
+	public void setIsOn(boolean on) {
 		isOn = on;
 	}
 

@@ -2,6 +2,7 @@ package il.ac.afeka.energyservice.services.messaging;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import il.ac.afeka.energyservice.boundaries.DeviceBoundary;
 import il.ac.afeka.energyservice.boundaries.MessageBoundary;
 import il.ac.afeka.energyservice.logic.EnergyConsumptionService;
@@ -14,7 +15,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import reactor.core.publisher.Mono;
-
 import java.util.function.Consumer;
 
 @Configuration
@@ -34,6 +34,7 @@ public class KafkaMessageHandler implements MessageQueueHandler {
 	@PostConstruct
 	public void init() {
 		this.jackson = new ObjectMapper();
+		this.jackson.registerModule(new JavaTimeModule());
 	}
 
 	@Value("${target.topic.name:topic1}")
@@ -56,6 +57,7 @@ public class KafkaMessageHandler implements MessageQueueHandler {
 				}
 			} catch (Exception e) {
 				this.logger.error(e.getMessage());
+				this.logger.error(e.getStackTrace());
 			}
 		};
 	}

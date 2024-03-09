@@ -3,6 +3,7 @@ package il.ac.afeka.energyservice.boundaries;
 import il.ac.afeka.energyservice.data.DeviceEntity;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 
 public class DeviceBoundary {
@@ -12,7 +13,7 @@ public class DeviceBoundary {
 	private LocalDateTime registrationTimestamp;
 	private LocalDateTime lastUpdateTimestamp;
 	private String location;
-	private int manufacturerPowerInWatts;
+	private float manufacturerPowerInWatts;
 	private StatusBoundary status;
 	private Map<String, Object> additionalAttributes;
 
@@ -92,11 +93,11 @@ public class DeviceBoundary {
 		this.location = location;
 	}
 
-	public int getManufacturerPowerInWatts() {
+	public float getManufacturerPowerInWatts() {
 		return manufacturerPowerInWatts;
 	}
 
-	public void setManufacturerPowerInWatts(int manufacturerPowerInWatts) {
+	public void setManufacturerPowerInWatts(float manufacturerPowerInWatts) {
 		this.manufacturerPowerInWatts = manufacturerPowerInWatts;
 	}
 
@@ -113,6 +114,9 @@ public class DeviceBoundary {
 	}
 
 	public void setAdditionalAttributes(Map<String, Object> additionalAttributes) {
+		if (additionalAttributes == null)
+			additionalAttributes = new HashMap<>();
+
 		this.additionalAttributes = additionalAttributes;
 	}
 
