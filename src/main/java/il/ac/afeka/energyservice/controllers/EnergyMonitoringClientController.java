@@ -1,6 +1,6 @@
-package il.ac.afeka.rsocketmessagingservice.controllers;
+package il.ac.afeka.energyservice.controllers;
 
-import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
+import il.ac.afeka.energyservice.boundaries.MessageBoundary;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,7 +10,8 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.*;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 @RestController
 @RequestMapping(path = "/energy")
@@ -56,7 +57,7 @@ public class EnergyMonitoringClientController {
                 .retrieveMono(MessageBoundary.class);
     }
     @GetMapping("/summary/daily")
-    public Flux<MessageBoundary> getConsumptionSummary(@RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") Date date) {
+    public Flux<MessageBoundary> getDailyConsumptionSummary(@RequestParam @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
         return this.requester
                 .route(CONSUMPTION_SUMMARY_ROUTE)
                 .data(date)
@@ -64,13 +65,14 @@ public class EnergyMonitoringClientController {
     }
 
     @GetMapping("/summary/monthly")
-    public Flux<MessageBoundary> getConsumptionSummary(@RequestParam int month) {
-        if (month < 1 || month > 12)
-            return Flux.error(new RuntimeException("Invalid month")); // Consider custom exception
+    public Flux<MessageBoundary> getMonthlyConsumptionSummary(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") LocalDate date) {
+        LocalDate todayFormatted = LocalDate.parse(LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM")));
+        if (todayFormatted.isBefore(date))
+            return Flux.error(new RuntimeException("Invalid Date provided"));
 
         return this.requester
                 .route(CONSUMPTION_SUMMARY_ROUTE)
-                .data(month)
+                .data(date)
                 .retrieveFlux(MessageBoundary.class);
     }
 

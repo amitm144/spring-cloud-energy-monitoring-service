@@ -1,5 +1,6 @@
-package il.ac.afeka.rsocketmessagingservice.utils;
+package il.ac.afeka.energyservice.utils;
 
+import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
@@ -15,7 +16,7 @@ public class DateUtils {
             .toFormatter();
 
     public static boolean isValidDate(String inputDate) {
-        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
+        DateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
         dateFormat.setLenient(false); // set strict parsing
 
         try {
@@ -26,6 +27,19 @@ public class DateUtils {
             return inputDate.equals(dateFormat.format(date));
         } catch (ParseException | NullPointerException e) {
             return false;
+        }
+    }
+
+    public static boolean isValidDate(String date, String dateFormatString) {
+        DateFormat dateFormat = new SimpleDateFormat(dateFormatString);
+        dateFormat.setLenient(false); // Strict parsing
+
+        try {
+            // Attempt to parse the date against the given format string
+            dateFormat.parse(dateFormat.format(date));
+            return true; // Date is valid according to the format
+        } catch (ParseException e) {
+            return false; // Date is invalid according to the format
         }
     }
 

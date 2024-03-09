@@ -1,4 +1,4 @@
-package il.ac.afeka.rsocketmessagingservice.data;
+package il.ac.afeka.energyservice.data;
 
 public class ExternalReferenceEntity {
 	private String service;

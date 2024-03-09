@@ -1,7 +1,8 @@
-package il.ac.afeka.rsocketmessagingservice.controllers;
+package il.ac.afeka.energyservice.controllers;
 
-import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
-import il.ac.afeka.rsocketmessagingservice.logic.EnergyConsumptionService;
+import il.ac.afeka.energyservice.boundaries.MessageBoundary;
+import il.ac.afeka.energyservice.logic.EnergyConsumptionService;
+import il.ac.afeka.energyservice.utils.DateUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +11,7 @@ import org.springframework.stereotype.Controller;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Controller
 public class EnergyMonitoringRSocketController {
@@ -23,19 +24,24 @@ public class EnergyMonitoringRSocketController {
     @MessageMapping("${app.rsocket.event.consumption.live}")
     public Mono<MessageBoundary> publishLiveConsumption() {
         this.logger.debug("live consumption request received");
-        return energyService.getLiveConsumption();
+        return energyService.getLiveConsumptionSummary();
     }
 
     @MessageMapping("${app.rsocket.event.consumption.summary}")
-    public Mono<MessageBoundary> publishConsumptionSummery() {
-        this.logger.debug("publishing consumption summary");
-        return energyService.getDailySummary(new Date());
+    public Mono<MessageBoundary> publishConsumptionSummery(LocalDateTime date) {
+        if (DateUtils.isValidDate(date.toLocalDate().toString(), "yyyy-MM")) {
+            this.logger.debug("publishing monthly consumption summary");
+            date = LocalDateTime.of(date.getYear(), date.getMonth(), 1, 0, 0);
+            return energyService.getMonthlyConsumptionSummary(date);
+        }
+        this.logger.debug("publishing daily consumption summary");
+        return energyService.getDailyConsumptionSummary(date);
     }
 
     @MessageMapping("${app.rsocket.event.consumption.warning}")
     public Flux<MessageBoundary> getConsumptionWarnings() {
         this.logger.debug("publishing over-consumption warning");
-        return energyService.getConsumptionWarnings() ;
+        return energyService.getConsumptionWarnings();
     }
 
     @MessageMapping("${app.rsocket.event.overcurrent.warning}")

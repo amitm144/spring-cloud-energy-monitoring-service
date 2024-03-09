@@ -1,10 +1,10 @@
-package il.ac.afeka.rsocketmessagingservice.messageHandler;
+package il.ac.afeka.energyservice.services.messaging;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
-import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
-import il.ac.afeka.rsocketmessagingservice.logic.EnergyConsumptionService;
+import il.ac.afeka.energyservice.boundaries.DeviceBoundary;
+import il.ac.afeka.energyservice.boundaries.MessageBoundary;
+import il.ac.afeka.energyservice.logic.EnergyConsumptionService;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import reactor.core.publisher.Mono;
 
 import java.util.function.Consumer;
 
@@ -58,9 +59,14 @@ public class KafkaMessageHandler implements MessageQueueHandler {
 		};
 	}
 
-	@Bean
-	public void publish(Object data) throws JsonProcessingException {
-		this.jackson.writeValueAsString(data);
-		this.kafkaProducer.send(this.targetTopic, data);
+	public Mono<Void> publish(Object data) {
+		try {
+			this.jackson.writeValueAsString(data);
+			this.kafkaProducer.send(this.targetTopic, data);
+
+		} catch (JsonProcessingException e) {
+			this.logger.error(e.getMessage());
+		}
+		return Mono.empty();
 	}
 }

@@ -1,6 +1,6 @@
-package il.ac.afeka.rsocketmessagingservice.boundaries;
+package il.ac.afeka.energyservice.boundaries;
 
-import il.ac.afeka.rsocketmessagingservice.data.DeviceEntity;
+import il.ac.afeka.energyservice.data.DeviceEntity;
 
 import java.time.LocalDateTime;
 import java.util.Map;

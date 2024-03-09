@@ -1,21 +1,18 @@
-package il.ac.afeka.rsocketmessagingservice.logic;
+package il.ac.afeka.energyservice.logic;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
-import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
-import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
-import il.ac.afeka.rsocketmessagingservice.data.DeviceEntity;
-import il.ac.afeka.rsocketmessagingservice.data.ExternalReferenceEntity;
-import il.ac.afeka.rsocketmessagingservice.data.MessageEntity;
-import il.ac.afeka.rsocketmessagingservice.messageHandler.MessageQueueHandler;
-import il.ac.afeka.rsocketmessagingservice.repositories.DeviceDataRepository;
-import il.ac.afeka.rsocketmessagingservice.repositories.EnergyMonitoringRepository;
+import il.ac.afeka.energyservice.boundaries.DeviceBoundary;
+import il.ac.afeka.energyservice.boundaries.MessageBoundary;
+import il.ac.afeka.energyservice.data.DeviceEntity;
+import il.ac.afeka.energyservice.data.ExternalReferenceEntity;
+import il.ac.afeka.energyservice.data.MessageEntity;
+import il.ac.afeka.energyservice.services.messaging.MessageQueueHandler;
+import il.ac.afeka.energyservice.repositories.DeviceDataRepository;
+import il.ac.afeka.energyservice.repositories.EnergyMonitoringRepository;
+import il.ac.afeka.energyservice.utils.ConsumptionCalculator;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -29,7 +26,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-import static il.ac.afeka.rsocketmessagingservice.utils.DateUtils.isLastDayOfMonth;
+import static il.ac.afeka.energyservice.utils.DateUtils.isLastDayOfMonth;
 
 @Service
 public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
@@ -66,16 +63,16 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                     // Sleep until midnight
                     TimeUnit.MILLISECONDS.sleep(sleepTime);
                     // Generate daily summary
-                    MessageBoundary summary = generateDailySummary();
+                    MessageBoundary summary = generateDailySummary(LocalDate.now());
                     // issue daily consumption summary
                     this.messageHandler.publish(summary);
                     // Generate monthly summary if needed and issue it
                     if (isLastDayOfMonth()) {
-                        summary = generateMonthlySummary();
+                        summary = generateMonthlySummary(LocalDateTime.now());
                         this.messageHandler.publish(summary);
                     }
                 }
-            } catch (InterruptedException | JsonProcessingException e) {
+            } catch (InterruptedException e) {
                 // If the thread is interrupted, log the exception
                 Thread.currentThread().interrupt();
                 this.logger.error("Thread "
@@ -112,23 +109,18 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     }
 
     @Override
-    public Mono<MessageBoundary> getLiveConsumption() {
-        return null;
-    }
-
-    @Override
     public Mono<MessageBoundary> getLiveConsumptionSummary() {
-        return Mono.just(createLiveSummary());
+        return Mono.just(generateLiveSummary());
     }
 
     @Override
-    public Mono<MessageBoundary> getDailySummary(LocalDateTime date) {
-        return Mono.just(createDailySummary(date));
+    public Mono<MessageBoundary> getDailyConsumptionSummary(LocalDateTime date) {
+        return Mono.just(generateDailySummary(date));
     }
 
     @Override
-    public Mono<MessageBoundary> getConsumptionSummaryByMonth(LocalDateTime date) {
-        return Mono.just(createMonthlySummary(date));
+    public Mono<MessageBoundary> getMonthlyConsumptionSummary(LocalDateTime date) {
+        return Mono.just(this.generateMonthlySummary(date));
     }
 
     @Override
@@ -152,26 +144,23 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         if (deviceCurrentConsumption > OVERCURRENT_LIMIT) {
             MessageBoundary overCurrentMessage = generateOverCurrentWarning(deviceDetails.getId(),
                     deviceDetails.getSubType(), deviceCurrentConsumption);
-            try {
-                this.messageHandler.publish(overCurrentMessage);
-            } catch (JsonProcessingException e) {
-                this.logger.error(e.getMessage());
-            }
+            this.messageHandler.publish(overCurrentMessage);
         }
     }
 
     @Override
     public void checkForOverConsumption() {
-//        this.getLiveConsumption()
-//                .map(MessageBoundary::getMessageDetails)
-//                .map(map -> map.getOrDefault("consumption", 0))
-//                .
+        float consumptionInWatts = (float) this.generateLiveSummary().getMessageDetails().getOrDefault("consumption", 0);
+        if (consumptionInWatts >= OVERCONSUMPTION_LIMIT) {
+            MessageBoundary overConsumptionMessage = generateConsumptionWarning(consumptionInWatts);
+            this.messageHandler.publish(overConsumptionMessage);
+        }
     }
 
     private MessageBoundary generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption) {
         MessageEntity overCurrentWarning = new MessageEntity();
         overCurrentWarning.setMessageId(UUID.randomUUID().toString());
-        overCurrentWarning.setPublishedTimestamp(new Date());
+        overCurrentWarning.setPublishedTimestamp(LocalDateTime.now());
         overCurrentWarning.setMessageType("overcurrentWarning");
         overCurrentWarning.setSummary("device " + deviceId + " is over consuming");
 
@@ -195,7 +184,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     private MessageBoundary generateConsumptionWarning(float currentConsumption) {
         MessageEntity consumptionWarning = new MessageEntity();
         consumptionWarning.setMessageId(UUID.randomUUID().toString());
-        consumptionWarning.setPublishedTimestamp(new Date());
+        consumptionWarning.setPublishedTimestamp(LocalDateTime.now());
         consumptionWarning.setMessageType("consumptionWarning");
         consumptionWarning.setSummary("You have reached your daily consumption limit");
 
@@ -214,100 +203,121 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return new MessageBoundary(consumptionWarning);
     }
 
-    private MessageBoundary generateDailySummary() {
-        LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
-        LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
+    private MessageBoundary generateDailySummary(LocalDate date) {
+        LocalDateTime startOfDay = date.atStartOfDay();
+        LocalDateTime endOfDay = LocalDateTime.of(date, LocalTime.MAX);
         Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startOfDay, endOfDay);
 
         devices.filter(device -> device.getStatus().isOn())
-                .map(device-> {
-                    float remainingTimeOnInHours = Duration.between(device.getLastUpdateTimestamp(), LocalDateTime.now()).toHours();
-                    device.setTotalActiveTime(device.getTotalActiveTime() + remainingTimeOnInHours);
-                    return device;
-                });
+            .map(device-> {
+                float remainingTimeOnInHours = Duration.between(device.getLastUpdateTimestamp(), LocalDateTime.now()).toHours();
+                device.setTotalActiveTime(device.getTotalActiveTime() + remainingTimeOnInHours);
+                return device;
+            });
 
         LocalDateTime now = LocalDateTime.now();
-        MessageBoundary dailySummary = createDailySummary(now);
-        devices
-                .map(device -> {
-                    device.setTotalActiveTime(0);
-                    device.setLastUpdateTimestamp(now);
-                    return device;
-                })
-                .map(deviceDataRepository::save);
+        MessageBoundary dailySummary = generateDailySummary(now);
+        devices.map(device -> {
+                device.setTotalActiveTime(0);
+                device.setLastUpdateTimestamp(now);
+                return device;
+            })
+            .map(deviceDataRepository::save);
 
         return dailySummary;
     }
 
-    private MessageBoundary generateMonthlySummary() {
+    private MessageBoundary generateMonthlySummary(LocalDateTime date) {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
         String publishedTimestamp = date.format(formatter);
 
         // Calculate total consumption for the specified day
-        Mono <Float> totalConsumption = calculateConsumptionForMonth(date);
-        float bill = totalConsumption.block() * 0.0006145f;
+        Mono<Float> totalConsumption = calculateConsumptionForMonth(date);
+        Mono<Float> expectedBill = totalConsumption.map(ConsumptionCalculator::calculateEstimatedPrice);
 
-        MessageBoundary summary = new MessageBoundary();
+        MessageEntity summary = new MessageEntity();
         summary.setMessageType("monthConsumptionSummary");
         summary.setPublishedTimestamp(date);
         summary.setSummary("Your house consumed " + totalConsumption + " W/h on this month is" + date.getMonth().toString());
-        summary.setExternalReferences(createExternalReferences());
+
+        // Set external references
+        ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
+        Set<ExternalReferenceEntity> refs = new HashSet<>();
+        refs.add(externalReference);
+        summary.setExternalReferences(refs);
 
         Map<String, Object> messageDetails = new HashMap<>();
         messageDetails.put("totalConsumption:", totalConsumption);
-        messageDetails.put("expectedBill:", bill);
+        messageDetails.put("expectedBill:", expectedBill);
         summary.setMessageDetails(messageDetails);
 
-        return summary;
+        this.energyMonitoringRepository.save(summary);
+        return new MessageBoundary(summary);
     }
 
-    private MessageBoundary createLiveSummary() {
+    private MessageBoundary generateLiveSummary() {
         //TODO the function need to get also the list of location that we also write in the summary the consumption according the location.
-
-//                "externalReferences":[
-//        {
-//            "service":"string",
-//                "externalServiceId":"string"
-//        }
-//  ],
-//        "messageDetails":{
-//            "houseId": "strin  ng",
-//                    "consumption": float,
-//            "consumptionByLocation": [
-//            {
-//                "Location": "string",
-//                "consumption": float,
-//            }
-
-
-        MessageBoundary summary = new MessageBoundary();
+        MessageEntity summary = new MessageEntity();
         Mono <Float> totalConsumption = calculateTotalLiveConsumption();
 
         summary.setPublishedTimestamp(LocalDateTime.now());
         summary.setMessageType("dailyConsumptionSummary");
-        summary.setSummary("Your house consumed " + totalConsumption + " W/h on " + LocalDateTime.now());
-        summary.setExternalReferences(createExternalReferences());
+        summary.setSummary("Your is currently consuming " + totalConsumption + "W");
+
+        // Set external references
+        ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
+        Set<ExternalReferenceEntity> refs = new HashSet<>();
+        refs.add(externalReference);
+        summary.setExternalReferences(refs);
 
         Map<String, Object> messageDetails = new HashMap<>();
         messageDetails.put("current consumption:", totalConsumption);
         summary.setMessageDetails(messageDetails);
 
-        return summary;
+        this.energyMonitoringRepository.save(summary);
+        return new MessageBoundary(summary);
+    }
+
+    private MessageBoundary generateDailySummary(LocalDateTime date) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+        String publishedTimestamp = date.format(formatter);
+
+        // Calculate total consumption for the specified day
+        Mono<Float> totalConsumption = calculateConsumptionForDay(date);
+        Mono<Float> expectedBill = totalConsumption.map(ConsumptionCalculator::calculateEstimatedPrice);
+
+        MessageEntity summary = new MessageEntity();
+        summary.setMessageType("dailyConsumptionSummary");
+        summary.setPublishedTimestamp(date);
+        summary.setSummary("Your house consumed " + totalConsumption + " W/h on " + date.toString());
+
+        // Set external references
+        ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
+        Set<ExternalReferenceEntity> refs = new HashSet<>();
+        refs.add(externalReference);
+        summary.setExternalReferences(refs);
+
+        Map<String, Object> messageDetails = new HashMap<>();
+        messageDetails.put("totalConsumption:", totalConsumption);
+        messageDetails.put("expectedBill:", expectedBill);
+        summary.setMessageDetails(messageDetails);
+
+        this.energyMonitoringRepository.save(summary);
+        return new MessageBoundary(summary);
     }
 
     public Mono<Float> calculateTotalLiveConsumption () {
         return deviceDataRepository.findAll()
-                .filter(device -> device.getStatus().isOn()) // Filter devices with status = true
-                .map(d -> d.getStatus().getCurrentPowerInWatts()) // Map each device to its consumption
-                .reduce(0.0f,Float::sum); // Sum up all the consumptions
+                .filter(device -> device.getStatus().isOn())
+                .map(d -> d.getStatus().getCurrentPowerInWatts())
+                .reduce(0.0f,Float::sum);
     }
 
     public Mono<Float> calculateTotalLiveConsumptionByLocation(String location) {
         return deviceDataRepository.findAll()
-                .filter(device -> device.getStatus().isOn()) // Filter devices with status = true
-                .filter(device -> device.getLocation().equals(location))
-                .map(d -> d.getStatus().getCurrentPowerInWatts()) // Map each device to its consumption
-                .reduce(0.0f,Float::sum); // Sum up all the consumptions
+                .filter(device -> device.getStatus().isOn() && device.getLocation().equals(location))
+                .map(d -> d.getStatus().getCurrentPowerInWatts())
+                .reduce(0.0f,Float::sum);
     }
 
     private long calculateSleepTimeUntilMidnightInMilliseconds() {
@@ -317,26 +327,19 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     }
 
     private Mono<Float> calculateConsumptionForDay(LocalDateTime date) {
-        LocalDateTime startDate = date.toLocalDate().atStartOfDay()
-                .with(LocalTime.of(0, 0, 0))
-                .plusMinutes(1);
-
+        LocalDateTime startDate = date.toLocalDate().atStartOfDay();
         LocalDateTime endDate = date.toLocalDate().atTime(23, 59, 59);
 
-        Flux <DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startDate,endDate); //need to check
-
-        return  devices.map(d -> d.getStatus().getCurrentPowerInWatts()* d.getTotalActiveTime()) // Map each device to its consumption
-                .reduce(0.0f, Float::sum);
+        Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startDate,endDate);
+        return ConsumptionCalculator.calculateTotalConsumption(devices);
     }
 
     private Mono<Float> calculateConsumptionForMonth(LocalDateTime date) {
         LocalDateTime firstDayOfMonth = date.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
         LocalDateTime lastDayOfMonth = date.with(TemporalAdjusters.lastDayOfMonth()).withHour(23).withMinute(59).withSecond(59);
 
-        Flux <DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(firstDayOfMonth,lastDayOfMonth); //need to check
-
-        return  devices.map(d -> d.getStatus().getCurrentPowerInWatts()* d.getTotalActiveTime()) // Map each device to its consumption
-                .reduce(0.0f, Float::sum);
+        Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(firstDayOfMonth,lastDayOfMonth);
+        return ConsumptionCalculator.calculateTotalConsumption(devices);
     }
 
     private ExternalReferenceEntity createDefaultExternalReferenceEntity() {

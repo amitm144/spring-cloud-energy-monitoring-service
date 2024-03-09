@@ -1,4 +1,4 @@
-package il.ac.afeka.rsocketmessagingservice.boundaries;
+package il.ac.afeka.energyservice.boundaries;
 
 public class IdBoundary {
 	private String messageId;

@@ -1,6 +1,6 @@
-package il.ac.afeka.rsocketmessagingservice.boundaries;
+package il.ac.afeka.energyservice.boundaries;
 
-import il.ac.afeka.rsocketmessagingservice.data.StatusEntity;
+import il.ac.afeka.energyservice.data.StatusEntity;
 
 import java.util.Arrays;
 
