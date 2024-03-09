@@ -5,22 +5,22 @@ import java.time.LocalDateTime;
 
 public class HistoricalConsumptionBoundary {
 
-	private LocalDate date;
+	private LocalDateTime date;
 	private float totalConsumption;
 
 	public HistoricalConsumptionBoundary() {
 	}
 
-	public HistoricalConsumptionBoundary(LocalDate date, float totalConsumption) {
+	public HistoricalConsumptionBoundary(LocalDateTime date, float totalConsumption) {
 		this.date = date;
 		this.totalConsumption = totalConsumption;
 	}
 
-	public LocalDate getDate() {
+	public LocalDateTime getDate() {
 		return date;
 	}
 
-	public void setDate(LocalDate date) {
+	public void setDate(LocalDateTime date) {
 		this.date = date;
 	}
 

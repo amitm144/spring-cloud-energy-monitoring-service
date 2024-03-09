@@ -23,7 +23,6 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -129,13 +128,15 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
 
     @Override
     public Flux<MessageBoundary> getConsumptionWarnings() {
-        return this.energyMonitoringRepository.findAllByMessageType("consumptionWarning")
+        return this.energyMonitoringRepository
+                .findAllByMessageType("consumptionWarning")
                 .map(MessageBoundary::new);
     }
 
     @Override
     public Flux<MessageBoundary> getOverCurrentWarnings() {
-        return this.energyMonitoringRepository.findAllByMessageType("overcurrentWarning")
+        return this.energyMonitoringRepository
+                .findAllByMessageType("overcurrentWarning")
                 .map(MessageBoundary::new);
     }
 
@@ -207,16 +208,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     }
 
     private Mono<MessageBoundary> generateDailySummary(LocalDate date ) {
-        LocalDateTime startOfDay = date.atStartOfDay();
-        LocalDateTime endOfDay = LocalDateTime.of(date, LocalTime.MAX);
-        Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startOfDay, endOfDay);
-
-        Flux<DeviceEntity> onDevices = devices.filter(device -> device.getStatus().isOn())
-            .map(device-> {
-                float remainingTimeOnInHours = Duration.between(device.getLastUpdateTimestamp(), LocalDateTime.now()).toHours();
-                device.setTotalActiveTime(device.getTotalActiveTime() + remainingTimeOnInHours);
-                return device;
-            });
+        Flux<DeviceEntity> onDevices = endDay(date);
 
         Mono<Float> totalConsumptionMono = calculateConsumptionForDay(date);
         Mono<Float> expectedBillMono = totalConsumptionMono.map(ConsumptionCalculator::calculateEstimatedPrice);
@@ -280,7 +272,6 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                     refs.add(externalReference);
                     summary.setExternalReferences(refs);
 
-
                     Map<String, Object> messageDetails = new HashMap<>();
                     messageDetails.put("totalConsumption", totalConsumption);
                     messageDetails.put("expectedBill", expectedBill);
@@ -326,12 +317,6 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                 .reduce(0.0f,Float::sum);
     }
 
-    private long calculateSleepTimeUntilMidnightInMilliseconds() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime nextMidnight = now.toLocalDate().atTime(LocalTime.MIDNIGHT).plusDays(1);
-        return Duration.between(now, nextMidnight).toMillis();
-    }
-
     private Mono<Float> calculateConsumptionForDay(LocalDate date) {
         LocalDateTime startDate = date.atStartOfDay();
         LocalDateTime endDate = date.atTime(23, 59, 59);
@@ -359,9 +344,35 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return Flux.range(1, count)
                 .map(date::minusMonths)
                 .flatMap(month -> calculateConsumptionForMonth(month)
-                        .map(totalConsumption -> new HistoricalConsumptionBoundary(month, totalConsumption))
+                        .map(totalConsumption ->
+                                new HistoricalConsumptionBoundary(month.withDayOfMonth(1).atStartOfDay(),
+                                    totalConsumption))
                         .flux())
                 .collectList();
     }
 
+    /**
+     * Adds the on time from last device on update until midnight to the device's total on time
+     * @param date day to end
+     * @return flux of on devices
+     */
+    private Flux<DeviceEntity> endDay(LocalDate date) {
+        LocalDateTime startOfDay = date.atStartOfDay();
+        LocalDateTime endOfDay = LocalDateTime.of(date, LocalTime.MAX);
+        Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startOfDay, endOfDay);
+
+        return devices.filter(device -> device.getStatus().isOn())
+                .map(device-> {
+                    float remainingTimeOnInHours = Duration.between(device.getLastUpdateTimestamp(), LocalDateTime.now()).toHours();
+                    device.setTotalActiveTime(device.getTotalActiveTime() + remainingTimeOnInHours);
+                    return device;
+                });
+    }
+
+
+    private long calculateSleepTimeUntilMidnightInMilliseconds() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime nextMidnight = now.toLocalDate().atTime(LocalTime.MIDNIGHT).plusDays(1);
+        return Duration.between(now, nextMidnight).toMillis();
+    }
 }
