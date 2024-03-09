@@ -1,6 +1,7 @@
 package il.ac.afeka.energyservice.logic;
 
 import il.ac.afeka.energyservice.boundaries.DeviceBoundary;
+import il.ac.afeka.energyservice.boundaries.HistoricalConsumptionBoundary;
 import il.ac.afeka.energyservice.boundaries.MessageBoundary;
 import il.ac.afeka.energyservice.data.DeviceEntity;
 import il.ac.afeka.energyservice.data.ExternalReferenceEntity;
@@ -36,6 +37,8 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     private final MessageQueueHandler messageHandler;
     private final Log logger = LogFactory.getLog(EnergyConsumptionServiceImp.class);
 
+    @Value("${app.consumption.history:3}")
+    private int CONSUMPTION_HISTORY_LENGTH ;
     @Value("${house.consumption.limit:8000}")
     private float OVERCONSUMPTION_LIMIT;
     @Value("${house.current.limit:15}")
@@ -203,7 +206,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return this.energyMonitoringRepository.save(consumptionWarning).map(MessageBoundary::new);
     }
 
-    private Mono<MessageBoundary> generateDailySummary(LocalDate date) {
+    private Mono<MessageBoundary> generateDailySummary(LocalDate date ) {
         LocalDateTime startOfDay = date.atStartOfDay();
         LocalDateTime endOfDay = LocalDateTime.of(date, LocalTime.MAX);
         Flux<DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startOfDay, endOfDay);
@@ -258,11 +261,13 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         // Calculate total consumption for the specified month
         Mono<Float> totalConsumptionMono = calculateConsumptionForMonth(date);
         Mono<Float> expectedBillMono = totalConsumptionMono.map(ConsumptionCalculator::calculateEstimatedPrice);
+        Mono<List<HistoricalConsumptionBoundary>> historicalConsumptions = getHistoricalConsumptionList(date, CONSUMPTION_HISTORY_LENGTH);
 
-        return totalConsumptionMono.zipWith(expectedBillMono)
+        return totalConsumptionMono.zipWith(expectedBillMono).zipWith(historicalConsumptions)
                 .flatMap(tuple -> {
-                    Float totalConsumption = tuple.getT1();
-                    Float expectedBill = tuple.getT2();
+                    Float totalConsumption = tuple.getT1().getT1();
+                    Float expectedBill = tuple.getT1().getT2();
+                    List<HistoricalConsumptionBoundary> previousConsumptions = tuple.getT2();
 
                     MessageEntity summary = new MessageEntity();
                     summary.setMessageType("monthlyConsumptionSummary");
@@ -275,9 +280,11 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                     refs.add(externalReference);
                     summary.setExternalReferences(refs);
 
+
                     Map<String, Object> messageDetails = new HashMap<>();
                     messageDetails.put("totalConsumption", totalConsumption);
                     messageDetails.put("expectedBill", expectedBill);
+                    messageDetails.put("historicalConsumption:",previousConsumptions);
                     summary.setMessageDetails(messageDetails);
 
                     return energyMonitoringRepository.save(summary);
@@ -348,21 +355,13 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return externalReference;
     }
 
-    private Mono<List<Float>> getLastThreeMonthConsumption(LocalDate date) {
-        List<Mono<Float>> historicalConsumptionMonos = new ArrayList<>();
-        for (int i = 1; i <= 3; i++) {
-            LocalDate historicalDate = date.minusMonths(i);
-            Mono<Float> historicalTotalConsumption = calculateConsumptionForMonth(historicalDate);
-            historicalConsumptionMonos.add(historicalTotalConsumption);
-        }
-        return Mono.zip(historicalConsumptionMonos, objects -> {
-            List<Float> historicalConsumption = new ArrayList<>();
-            for (Object obj : objects) {
-                Float value = (Float) obj;
-                historicalConsumption.add(value != null ? value : 0.0f);
-            }
-            return historicalConsumption;
-        });
+    public Mono<List<HistoricalConsumptionBoundary>> getHistoricalConsumptionList(LocalDate date, int count) {
+        return Flux.range(1, count)
+                .map(date::minusMonths)
+                .flatMap(month -> calculateConsumptionForMonth(month)
+                        .map(totalConsumption -> new HistoricalConsumptionBoundary(month, totalConsumption))
+                        .flux())
+                .collectList();
     }
 
 }
