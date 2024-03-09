@@ -1,12 +1,13 @@
 package il.ac.afeka.rsocketmessagingservice.logic;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import il.ac.afeka.rsocketmessagingservice.boundaries.DeviceBoundary;
+import il.ac.afeka.rsocketmessagingservice.boundaries.ExternalReferenceBoundary;
 import il.ac.afeka.rsocketmessagingservice.boundaries.MessageBoundary;
 import il.ac.afeka.rsocketmessagingservice.data.DeviceEntity;
 import il.ac.afeka.rsocketmessagingservice.data.ExternalReferenceEntity;
 import il.ac.afeka.rsocketmessagingservice.data.MessageEntity;
-import il.ac.afeka.rsocketmessagingservice.messageHandler.KafkaMessageHandler;
 import il.ac.afeka.rsocketmessagingservice.messageHandler.MessageQueueHandler;
 import il.ac.afeka.rsocketmessagingservice.repositories.DeviceDataRepository;
 import il.ac.afeka.rsocketmessagingservice.repositories.EnergyMonitoringRepository;
@@ -14,6 +15,7 @@ import jakarta.annotation.PostConstruct;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -22,6 +24,8 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -45,7 +49,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     @Value("${spring.application.name}")
     private String SERVICE_NAME;
 
-    public EnergyConsumptionServiceImp(KafkaMessageHandler messageHandler, DeviceDataRepository deviceDataRepository,
+    public EnergyConsumptionServiceImp(MessageQueueHandler messageHandler, DeviceDataRepository deviceDataRepository,
                                        EnergyMonitoringRepository energyMonitoringRepository) {
         this.energyMonitoringRepository = energyMonitoringRepository;
         this.deviceDataRepository = deviceDataRepository;
@@ -113,18 +117,18 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     }
 
     @Override
-    public Flux<MessageBoundary> getLiveConsumptionSummary() {
-        return null;
+    public Mono<MessageBoundary> getLiveConsumptionSummary() {
+        return Mono.just(createLiveSummary());
     }
 
     @Override
-    public Flux<MessageBoundary> getConsumptionSummaryByDay(Date day) {
-        return null;
+    public Mono<MessageBoundary> getDailySummary(LocalDateTime date) {
+        return Mono.just(createDailySummary(date));
     }
 
     @Override
-    public Flux<MessageBoundary> getConsumptionSummaryByMonth(Date date) {
-        return null;
+    public Mono<MessageBoundary> getConsumptionSummaryByMonth(LocalDateTime date) {
+        return Mono.just(createMonthlySummary(date));
     }
 
     @Override
@@ -197,7 +201,6 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
 
         // Set external references
         ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
-
         Set<ExternalReferenceEntity> refs = new HashSet<>();
         refs.add(externalReference);
         consumptionWarning.setExternalReferences(refs);
@@ -236,16 +239,104 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return dailySummary;
     }
 
-    private MessageBoundary createDailySummary(LocalDateTime date) { return null;}
-
     private MessageBoundary generateMonthlySummary() {
-        return null;
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+        String publishedTimestamp = date.format(formatter);
+
+        // Calculate total consumption for the specified day
+        Mono <Float> totalConsumption = calculateConsumptionForMonth(date);
+        float bill = totalConsumption.block() * 0.0006145f;
+
+        MessageBoundary summary = new MessageBoundary();
+        summary.setMessageType("monthConsumptionSummary");
+        summary.setPublishedTimestamp(date);
+        summary.setSummary("Your house consumed " + totalConsumption + " W/h on this month is" + date.getMonth().toString());
+        summary.setExternalReferences(createExternalReferences());
+
+        Map<String, Object> messageDetails = new HashMap<>();
+        messageDetails.put("totalConsumption:", totalConsumption);
+        messageDetails.put("expectedBill:", bill);
+        summary.setMessageDetails(messageDetails);
+
+        return summary;
+    }
+
+    private MessageBoundary createLiveSummary() {
+        //TODO the function need to get also the list of location that we also write in the summary the consumption according the location.
+
+//                "externalReferences":[
+//        {
+//            "service":"string",
+//                "externalServiceId":"string"
+//        }
+//  ],
+//        "messageDetails":{
+//            "houseId": "strin  ng",
+//                    "consumption": float,
+//            "consumptionByLocation": [
+//            {
+//                "Location": "string",
+//                "consumption": float,
+//            }
+
+
+        MessageBoundary summary = new MessageBoundary();
+        Mono <Float> totalConsumption = calculateTotalLiveConsumption();
+
+        summary.setPublishedTimestamp(LocalDateTime.now());
+        summary.setMessageType("dailyConsumptionSummary");
+        summary.setSummary("Your house consumed " + totalConsumption + " W/h on " + LocalDateTime.now());
+        summary.setExternalReferences(createExternalReferences());
+
+        Map<String, Object> messageDetails = new HashMap<>();
+        messageDetails.put("current consumption:", totalConsumption);
+        summary.setMessageDetails(messageDetails);
+
+        return summary;
+    }
+
+    public Mono<Float> calculateTotalLiveConsumption () {
+        return deviceDataRepository.findAll()
+                .filter(device -> device.getStatus().isOn()) // Filter devices with status = true
+                .map(d -> d.getStatus().getCurrentPowerInWatts()) // Map each device to its consumption
+                .reduce(0.0f,Float::sum); // Sum up all the consumptions
+    }
+
+    public Mono<Float> calculateTotalLiveConsumptionByLocation(String location) {
+        return deviceDataRepository.findAll()
+                .filter(device -> device.getStatus().isOn()) // Filter devices with status = true
+                .filter(device -> device.getLocation().equals(location))
+                .map(d -> d.getStatus().getCurrentPowerInWatts()) // Map each device to its consumption
+                .reduce(0.0f,Float::sum); // Sum up all the consumptions
     }
 
     private long calculateSleepTimeUntilMidnightInMilliseconds() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime nextMidnight = now.toLocalDate().atTime(LocalTime.MIDNIGHT).plusDays(1);
         return Duration.between(now, nextMidnight).toMillis();
+    }
+
+    private Mono<Float> calculateConsumptionForDay(LocalDateTime date) {
+        LocalDateTime startDate = date.toLocalDate().atStartOfDay()
+                .with(LocalTime.of(0, 0, 0))
+                .plusMinutes(1);
+
+        LocalDateTime endDate = date.toLocalDate().atTime(23, 59, 59);
+
+        Flux <DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(startDate,endDate); //need to check
+
+        return  devices.map(d -> d.getStatus().getCurrentPowerInWatts()* d.getTotalActiveTime()) // Map each device to its consumption
+                .reduce(0.0f, Float::sum);
+    }
+
+    private Mono<Float> calculateConsumptionForMonth(LocalDateTime date) {
+        LocalDateTime firstDayOfMonth = date.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+        LocalDateTime lastDayOfMonth = date.with(TemporalAdjusters.lastDayOfMonth()).withHour(23).withMinute(59).withSecond(59);
+
+        Flux <DeviceEntity> devices = deviceDataRepository.findAllByLastUpdateTimestampBetween(firstDayOfMonth,lastDayOfMonth); //need to check
+
+        return  devices.map(d -> d.getStatus().getCurrentPowerInWatts()* d.getTotalActiveTime()) // Map each device to its consumption
+                .reduce(0.0f, Float::sum);
     }
 
     private ExternalReferenceEntity createDefaultExternalReferenceEntity() {

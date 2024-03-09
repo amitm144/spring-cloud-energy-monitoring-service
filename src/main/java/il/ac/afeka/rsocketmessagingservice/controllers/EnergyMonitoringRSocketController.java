@@ -27,9 +27,9 @@ public class EnergyMonitoringRSocketController {
     }
 
     @MessageMapping("${app.rsocket.event.consumption.summary}")
-    public Flux<MessageBoundary> publishConsumptionSummery() {
+    public Mono<MessageBoundary> publishConsumptionSummery() {
         this.logger.debug("publishing consumption summary");
-        return energyService.getConsumptionSummaryByDay(new Date());
+        return energyService.getDailySummary(new Date());
     }
 
     @MessageMapping("${app.rsocket.event.consumption.warning}")
