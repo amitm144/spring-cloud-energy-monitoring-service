@@ -65,6 +65,7 @@ public class KafkaMessageHandler implements MessageQueueHandler {
 	public Mono<Void> publish(Object data) {
 		try {
 			this.jackson.writeValueAsString(data);
+			this.logger.debug("Publishing message: \n" + data);
 			this.kafkaProducer.send(this.targetTopic, data);
 
 		} catch (JsonProcessingException e) {

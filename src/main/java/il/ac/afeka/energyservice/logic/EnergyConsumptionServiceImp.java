@@ -4,12 +4,11 @@ import il.ac.afeka.energyservice.boundaries.DeviceBoundary;
 import il.ac.afeka.energyservice.boundaries.HistoricalConsumptionBoundary;
 import il.ac.afeka.energyservice.boundaries.MessageBoundary;
 import il.ac.afeka.energyservice.data.DeviceEntity;
-import il.ac.afeka.energyservice.data.ExternalReferenceEntity;
-import il.ac.afeka.energyservice.data.MessageEntity;
 import il.ac.afeka.energyservice.services.messaging.MessageQueueHandler;
 import il.ac.afeka.energyservice.repositories.DeviceDataRepository;
 import il.ac.afeka.energyservice.repositories.EnergyMonitoringRepository;
 import il.ac.afeka.energyservice.utils.ConsumptionCalculator;
+import il.ac.afeka.energyservice.utils.MessageBoundaryFactory;
 import jakarta.annotation.PostConstruct;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -44,10 +43,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     private float OVERCURRENT_LIMIT;
     @Value("${house.voltage:220}")
     private float HOUSEHOLD_VOLTAGE;
-    @Value("${spring.application.id}")
-    private String EXT_SERVICE_ID;
-    @Value("${spring.application.name}")
-    private String SERVICE_NAME;
+
 
     public EnergyConsumptionServiceImp(@Lazy MessageQueueHandler messageHandler, DeviceDataRepository deviceDataRepository,
                                         EnergyMonitoringRepository energyMonitoringRepository) {
@@ -93,19 +89,22 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     public Mono<Void> handleDeviceEvent(DeviceBoundary deviceEvent) {
         return deviceDataRepository.findById(deviceEvent.getId())
                 .flatMap(device -> {
-                    // Device exists, calculate remainder of time on and reset totalActiveTime
+                    // Device exists
                     if (!device.getStatus().isOn()) {
+                        // device is off, calculate time, set new totalActiveTime, and lastUpdateTime to now
                         float totalTimeOn = Duration.between(device.getLastUpdateTimestamp(),
                                 deviceEvent.getLastUpdateTimestamp()).toHours();
                         device.setTotalActiveTime(device.getTotalActiveTime() + totalTimeOn);
+                        device.setLastUpdateTimestamp(LocalDateTime.now());
                     }
-                    // Save the updated device data
+                    // save the updated device data
                     return deviceDataRepository.save(device);
                 })
                 .switchIfEmpty(Mono.defer(() -> {
-                    // Device does not exist, set totalActiveTime to 0
+                    // Device does not exist, set totalActiveTime to 0 and lastUpdateTime to now
                     DeviceEntity deviceNotification = deviceEvent.toEntity();
                     deviceNotification.setTotalActiveTime(0.0f);
+                    deviceNotification.setLastUpdateTimestamp(LocalDateTime.now());
                     return deviceDataRepository.save(deviceNotification);
                 }))
                 .then(Mono.empty());
@@ -146,6 +145,10 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
             return;
 
         float deviceCurrentConsumption = deviceDetails.getStatus().getCurrentPowerInWatts() / HOUSEHOLD_VOLTAGE;
+        this.logger.debug("Checking for over-current: limit: "
+                + OVERCURRENT_LIMIT
+                + " Usage: "
+                + deviceCurrentConsumption);
         if (deviceCurrentConsumption > OVERCURRENT_LIMIT) {
             generateOverCurrentWarning(deviceDetails.getId(), deviceDetails.getSubType(), deviceCurrentConsumption)
                     .subscribe(this.messageHandler::publish);
@@ -157,6 +160,10 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         this.generateLiveSummary()
                 .flatMap(liveSummary -> {
                     float consumptionInWatts = (float) liveSummary.getMessageDetails().getOrDefault("consumption", 0f);
+                    this.logger.debug("Checking for over-consumption: limit: "
+                            + OVERCONSUMPTION_LIMIT
+                            + " Usage: "
+                            + consumptionInWatts);
                     if (consumptionInWatts >= OVERCONSUMPTION_LIMIT) {
                         return generateConsumptionWarning(consumptionInWatts);
                     }
@@ -166,45 +173,20 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     }
 
     private Mono<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption) {
-        MessageEntity overCurrentWarning = new MessageEntity();
-        overCurrentWarning.setPublishedTimestamp(LocalDateTime.now());
-        overCurrentWarning.setMessageType("overcurrentWarning");
-        overCurrentWarning.setSummary("device " + deviceId + " is over consuming");
-
-        // Set external references
-        ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
-        Set<ExternalReferenceEntity> refs = new HashSet<>();
-        refs.add(externalReference);
-        overCurrentWarning.setExternalReferences(refs);
-
-        // Set message details
-        HashMap<String, Object> details = new HashMap<>();
-        details.put("deviceId", deviceId);
-        details.put("deviceType", deviceType);
-        details.put("currentConsumption", currentConsumption);
-        overCurrentWarning.setMessageDetails(details);
-
-        return this.energyMonitoringRepository.save(overCurrentWarning).map(MessageBoundary::new);
+        MessageBoundary overCurrentWarningMessage =
+                MessageBoundaryFactory.get().generateOverCurrentWarning(deviceId, deviceType, currentConsumption);
+        return this.energyMonitoringRepository
+                .save(overCurrentWarningMessage.toEntity())
+                .map(MessageBoundary::new);
     }
 
     private Mono<MessageBoundary> generateConsumptionWarning(float currentConsumption) {
-        MessageEntity consumptionWarning = new MessageEntity();
-        consumptionWarning.setPublishedTimestamp(LocalDateTime.now());
-        consumptionWarning.setMessageType("consumptionWarning");
-        consumptionWarning.setSummary("You have reached your daily consumption limit");
+        MessageBoundary consumptionWarning =
+                MessageBoundaryFactory.get().generateOverConsumptionWarning(currentConsumption);
 
-        // Set external references
-        ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
-        Set<ExternalReferenceEntity> refs = new HashSet<>();
-        refs.add(externalReference);
-        consumptionWarning.setExternalReferences(refs);
-
-        // Set message details
-        HashMap<String, Object> details = new HashMap<>();
-        details.put("currentConsumption", currentConsumption);
-        consumptionWarning.setMessageDetails(details);
-
-        return this.energyMonitoringRepository.save(consumptionWarning).map(MessageBoundary::new);
+        return this.energyMonitoringRepository
+                .save(consumptionWarning.toEntity())
+                .map(MessageBoundary::new);
     }
 
     private Mono<MessageBoundary> generateDailySummary(LocalDate date ) {
@@ -213,29 +195,17 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         Mono<Float> totalConsumptionMono = calculateConsumptionForDay(date);
         Mono<Float> expectedBillMono = totalConsumptionMono.map(ConsumptionCalculator::calculateEstimatedPrice);
 
-        Mono<MessageBoundary> dailySummary = totalConsumptionMono
+        Mono<MessageBoundary> summary = totalConsumptionMono
                 .zipWith(expectedBillMono)
                 .flatMap(tuple -> {
                     Float totalConsumption = tuple.getT1();
                     Float expectedBill = tuple.getT2();
 
-                    MessageEntity summary = new MessageEntity();
-                    summary.setMessageType("dailyConsumptionSummary");
-                    summary.setPublishedTimestamp(LocalDateTime.now());
-                    summary.setSummary("Your total power consumption for today is " + totalConsumption + "W");
+                    MessageBoundary dailySummary = MessageBoundaryFactory
+                            .get()
+                            .generateDailyConsumptionSummary(totalConsumption, expectedBill);
 
-                    // Set external references
-                    ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
-                    Set<ExternalReferenceEntity> refs = new HashSet<>();
-                    refs.add(externalReference);
-                    summary.setExternalReferences(refs);
-
-                    Map<String, Object> messageDetails = new HashMap<>();
-                    messageDetails.put("totalConsumption:", totalConsumption);
-                    messageDetails.put("expectedBill:", expectedBill);
-                    summary.setMessageDetails(messageDetails);
-
-                    return this.energyMonitoringRepository.save(summary);
+                    return this.energyMonitoringRepository.save(dailySummary.toEntity());
                 })
                 .map(MessageBoundary::new);
 
@@ -246,7 +216,7 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
             })
             .map(deviceDataRepository::save);
 
-        return dailySummary;
+        return summary;
     }
 
     private Mono<MessageBoundary> generateMonthlySummary(LocalDate date) {
@@ -261,24 +231,12 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                     Float expectedBill = tuple.getT1().getT2();
                     List<HistoricalConsumptionBoundary> previousConsumptions = tuple.getT2();
 
-                    MessageEntity summary = new MessageEntity();
-                    summary.setMessageType("monthlyConsumptionSummary");
-                    summary.setPublishedTimestamp(LocalDateTime.now());
-                    summary.setSummary("Your total power consumption for " + date.getMonth() + " is " + totalConsumption + "W");
+                    MessageBoundary summary =
+                            MessageBoundaryFactory.get()
+                                    .generateMonthlyConsumptionSummary(totalConsumption, expectedBill, date,
+                                            previousConsumptions);
 
-                    // Set external references
-                    ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
-                    Set<ExternalReferenceEntity> refs = new HashSet<>();
-                    refs.add(externalReference);
-                    summary.setExternalReferences(refs);
-
-                    Map<String, Object> messageDetails = new HashMap<>();
-                    messageDetails.put("totalConsumption", totalConsumption);
-                    messageDetails.put("expectedBill", expectedBill);
-                    messageDetails.put("historicalConsumption:",previousConsumptions);
-                    summary.setMessageDetails(messageDetails);
-
-                    return energyMonitoringRepository.save(summary);
+                    return energyMonitoringRepository.save(summary.toEntity());
                 })
                 .map(MessageBoundary::new);
     }
@@ -286,19 +244,9 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     private Mono<MessageBoundary> generateLiveSummary() {
         return calculateTotalLiveConsumption()
                 .flatMap(totalConsumption -> {
-                    MessageEntity summary = new MessageEntity();
-                    summary.setPublishedTimestamp(LocalDateTime.now());
-                    summary.setMessageType("liveConsumptionSummary");
-                    summary.setSummary("Your house is currently consuming " + totalConsumption + "W");
-                    ExternalReferenceEntity externalReference = createDefaultExternalReferenceEntity();
-                    Set<ExternalReferenceEntity> refs = new HashSet<>();
-                    refs.add(externalReference);
-                    summary.setExternalReferences(refs);
-
-                    Map<String, Object> messageDetails = new HashMap<>();
-                    messageDetails.put("currentConsumption:", totalConsumption);
-                    summary.setMessageDetails(messageDetails);
-                    return this.energyMonitoringRepository.save(summary);
+                    MessageBoundary summary =
+                            MessageBoundaryFactory.get().generateLiveConsumptionSummary(totalConsumption);
+                    return this.energyMonitoringRepository.save(summary.toEntity());
                 })
                 .map(MessageBoundary::new);
     }
@@ -333,13 +281,6 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         return ConsumptionCalculator.calculateTotalConsumption(devices);
     }
 
-    private ExternalReferenceEntity createDefaultExternalReferenceEntity() {
-        ExternalReferenceEntity externalReference = new ExternalReferenceEntity();
-        externalReference.setExternalServiceId(EXT_SERVICE_ID);
-        externalReference.setService(SERVICE_NAME);
-        return externalReference;
-    }
-
     public Mono<List<HistoricalConsumptionBoundary>> getHistoricalConsumptionList(LocalDate date, int count) {
         return Flux.range(1, count)
                 .map(date::minusMonths)
@@ -368,7 +309,6 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                     return device;
                 });
     }
-
 
     private long calculateSleepTimeUntilMidnightInMilliseconds() {
         LocalDateTime now = LocalDateTime.now();

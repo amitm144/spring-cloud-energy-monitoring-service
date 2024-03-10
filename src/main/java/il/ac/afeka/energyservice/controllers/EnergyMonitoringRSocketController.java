@@ -32,7 +32,7 @@ public class EnergyMonitoringRSocketController {
 
     @MessageMapping("${app.rsocket.event.consumption.live}")
     public Mono<MessageBoundary> publishLiveConsumption() {
-        this.logger.debug("live consumption request received");
+        this.logger.info("live consumption request received");
         return energyService.getLiveConsumptionSummary();
     }
 
@@ -43,7 +43,7 @@ public class EnergyMonitoringRSocketController {
             if (parsedDate.isAfter(LocalDate.now())) {
                 return Mono.error(new RuntimeException("Invalid date provided"));
             }
-            this.logger.debug("publishing daily consumption summary");
+            this.logger.info("daily consumption summary requested");
             return energyService.getDailyConsumptionSummary(parsedDate);
         } catch (DateTimeParseException e) {
             return Mono.error(new RuntimeException("Invalid date provided"));
@@ -57,7 +57,7 @@ public class EnergyMonitoringRSocketController {
             if (parsedDate.isAfter(LocalDate.now())) {
                 return Mono.error(new RuntimeException("Invalid date provided"));
             }
-            this.logger.debug("publishing monthly consumption summary");
+            this.logger.info("monthly consumption summary requested");
             return energyService.getMonthlyConsumptionSummary(parsedDate);
         } catch (DateTimeParseException e) {
             return Mono.error(new RuntimeException("Invalid date provided"));
@@ -66,13 +66,13 @@ public class EnergyMonitoringRSocketController {
 
     @MessageMapping("${app.rsocket.event.consumption.warning}")
     public Flux<MessageBoundary> getConsumptionWarnings() {
-        this.logger.debug("publishing over-consumption warning");
+        this.logger.info("over-consumption warning report requested");
         return energyService.getConsumptionWarnings();
     }
 
     @MessageMapping("${app.rsocket.event.overcurrent.warning}")
     public Flux<MessageBoundary> getOverCurrentWarnings() {
-        this.logger.debug("publishing over-current warning");
+        this.logger.info("over-current warning report requested");
         return energyService.getOverCurrentWarnings();
     }
 }
