@@ -14,6 +14,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -52,37 +53,15 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
         this.messageHandler = messageHandler;
     }
 
-    @PostConstruct
+    @Scheduled(cron = "0 0 0 * * *") // Execute at 00:00 every day
     public void startDailyThread() {
-        Thread vt = Thread.startVirtualThread(() -> {
-            // Calculate time until midnight
-            long sleepTime = calculateSleepTimeUntilMidnightInMilliseconds();
-            try {
-                while(true) {
-                    // Sleep until midnight
-                    TimeUnit.MILLISECONDS.sleep(sleepTime);
-                    // Generate daily summary and issue to message queue
-                    generateDailySummary(LocalDate.now())
-                            .subscribe(this.messageHandler::publish);
+        generateDailySummary(LocalDate.now()).subscribe(this.messageHandler::publish);
 
-                    // Generate monthly summary if needed and issue to message queue
-                    if (isLastDayOfMonth()) {
-                        generateMonthlySummary(LocalDate.now())
-                                .subscribe(this.messageHandler::publish);
-                    }
-                }
-            } catch (Exception e) {
-                // If the thread is interrupted, log the exception
-                Thread.currentThread().interrupt();
-                this.logger.error("Thread "
-                        + Thread.currentThread().threadId()
-                        + " was interrupted, failed to complete operation: "
-                        + e.getMessage()
-                );
-            }
-            // Code to be executed after waking up
-            this.logger.debug(LocalDateTime.now() + " : thread id " + Thread.currentThread().threadId() + " woke up");
-        });
+        // Generate monthly summary if needed and issue to message queue
+        if (isLastDayOfMonth()) {
+            generateMonthlySummary(LocalDate.now())
+                    .subscribe(this.messageHandler::publish);
+        }
     }
 
     @Override
