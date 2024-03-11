@@ -13,8 +13,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
 @Controller
@@ -74,21 +72,5 @@ public class EnergyMonitoringRSocketController {
     public Flux<MessageBoundary> getOverCurrentWarnings() {
         this.logger.info("over-current warning report requested");
         return energyService.getOverCurrentWarnings();
-    }
-
-    //for debugging purposes
-    @MessageMapping("${app.rsocket.event.device.save}")
-    public Mono<DeviceBoundary> saveDevice(DeviceBoundary device) {
-        return energyService.saveDevice(device);
-    }
-
-    @MessageMapping("${app.rsocket.event.device.getAll}")
-    public Flux<DeviceBoundary> getAllDevices() {
-        return energyService.getAllDevices();
-    }
-
-    @MessageMapping("${app.rsocket.event.device.deleteAll}")
-    public Mono<Void> deleteAllDevices() {
-        return energyService.deleteAllDevices();
     }
 }

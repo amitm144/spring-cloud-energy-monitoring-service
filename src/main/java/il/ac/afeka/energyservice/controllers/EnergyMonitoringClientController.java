@@ -1,6 +1,5 @@
 package il.ac.afeka.energyservice.controllers;
 
-import il.ac.afeka.energyservice.boundaries.DeviceBoundary;
 import il.ac.afeka.energyservice.boundaries.MessageBoundary;
 import il.ac.afeka.energyservice.services.messaging.MessageQueueHandler;
 import il.ac.afeka.energyservice.utils.DateUtils;
@@ -34,14 +33,6 @@ public class EnergyMonitoringClientController {
     private String MONTHLY_CONSUMPTION_SUMMARY_ROUTE;
     @Value("${app.rsocket.event.consumption.summary.daily}")
     private String DAILY_CONSUMPTION_SUMMARY_ROUTE;
-    //for debugging purposes
-    @Value("${app.rsocket.event.device.save}")
-    private String SAVE_DEVICE_ROUTE;
-    @Value("${app.rsocket.event.device.getAll}")
-    private String GET_ALL_DEVICES_ROUTE;
-    @Value("${app.rsocket.event.device.deleteAll}")
-    private String DELETE_ALL_DEVICES_ROUTE;
-
 
     @Autowired
     public void setBuilder(RSocketRequester.Builder builder, MessageQueueHandler kafka) {
@@ -113,29 +104,8 @@ public class EnergyMonitoringClientController {
                 .retrieveFlux(MessageBoundary.class);
     }
 
-    @PostMapping(path ="/kafka/message")
-    public Mono<Void> getTestKafka(@RequestBody MessageBoundary message) {
+    @PostMapping(path ="/message/test")
+    public Mono<Void> getTestMessage(@RequestBody MessageBoundary message) {
         return this.kafka.publish(message);
-    }
-
-    @PostMapping("/device")
-    public Mono<DeviceBoundary> saveDevice(@RequestBody DeviceBoundary device) {
-        return this.requester
-                .route(SAVE_DEVICE_ROUTE)
-                .data(device)
-                .retrieveMono(DeviceBoundary.class);
-    }
-
-    @GetMapping("/devices")
-    public Flux<DeviceBoundary> getAllDevices() {
-        return this.requester
-                .route(GET_ALL_DEVICES_ROUTE)
-                .retrieveFlux(DeviceBoundary.class);
-    }
-    @DeleteMapping("/devices")
-    public Mono<Void> deleteAllDevices() {
-        return this.requester
-                .route(DELETE_ALL_DEVICES_ROUTE)
-                .retrieveMono(Void.class);
     }
 }

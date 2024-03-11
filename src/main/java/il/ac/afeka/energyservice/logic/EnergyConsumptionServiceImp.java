@@ -61,63 +61,33 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                     .subscribe(this.messageHandler::publish);
         }
     }
-//todo
 
-    //    public Mono<Void> handleDeviceEvent(DeviceBoundary deviceEvent) {
-//        return this.deviceDataRepository.findAllById(List.of(deviceEvent.getId()))
-//                .defaultIfEmpty(new DeviceEntity())
-//                .flatMap(device -> {
-//                    if (device.getId() == null || device.getId().isBlank()) { // new device
-//                        device.setTotalActiveTime(0.0f);
-//                    } else if (!deviceEvent.getStatus().getIsOn()) {
-//                        // device switched off, calculate on time, set new totalActiveTime
-//                        float timeSwitchedOn = Duration.between(device.getLastUpdateTimestamp(),
-//                                deviceEvent.getLastUpdateTimestamp()).toHours();
-//                        device.setTotalActiveTime(device.getTotalActiveTime() + timeSwitchedOn);
-//                    }
-//                    if (deviceEvent.getStatus().getIsOn() != device.getStatus().getIsOn()) // device isOn status changed
-//                        device.setLastUpdateTimestamp(LocalDateTime.now());
-//
-//
-//                    return this.deviceDataRepository.save(device);
-//                })
-//                .then();
-//    }
     @Override
     public Mono<Void> handleDeviceEvent(DeviceBoundary deviceEvent) {
         return this.deviceDataRepository.findById(deviceEvent.getId())
                 .flatMap(device -> {
-                    //device turning off
                     if (!deviceEvent.getStatus().getIsOn()) {
-                        System.err.println("im turning off");
-
+                        // CASE 1 - device is being switched off, calculate "on" time, set new totalActiveTime
                         float timeSwitchedOn = (float) Duration.between(
                                 device.getLastUpdateTimestamp(),
                                 deviceEvent.getLastUpdateTimestamp()
                         ).toHours();
-
-                        System.err.println("i worked from : " + device.getLastUpdateTimestamp().toLocalTime()
-                                + " until : " + deviceEvent.getLastUpdateTimestamp().toLocalTime()
-                                + " == diff : " + timeSwitchedOn + " hours" );
-
                         device.setTotalActiveTime(device.getTotalActiveTime() + timeSwitchedOn);
+                        device.getStatus().setCurrentPowerInWatts(0.0f);
                         device.getStatus().setIsOn(false);
                     }
-                    // device turning on
-                    else {
-                        if (!device.getStatus().getIsOn() ) {
-                            System.err.println("im turning on again");
-                            device.setLastUpdateTimestamp(deviceEvent.getLastUpdateTimestamp());
-                            System.err.println("my last hours consumption was - " + device.getTotalActiveTime());
-                        }
+                    // CASE 2 - device is being turned on
+                    else if (!device.getStatus().getIsOn()) {
+                            device.getStatus().setIsOn(true);
                     }
+                    device.setLastUpdateTimestamp(LocalDateTime.now());
                     return deviceDataRepository.save(device);
                 })
+                // CASE 3 - unknown device
                 .switchIfEmpty(Mono.defer(() -> {
-                    System.err.println("im new!!");
                     DeviceEntity newDeviceEntity = deviceEvent.toEntity();
-                    return deviceDataRepository.save(newDeviceEntity)
-                            .then(Mono.just(newDeviceEntity));
+                    newDeviceEntity.setLastUpdateTimestamp(LocalDateTime.now());
+                    return deviceDataRepository.save(newDeviceEntity);
                 }))
                 .then();
     }
@@ -207,8 +177,6 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     public Mono<Void> deleteAllDevices() {
         return deviceDataRepository.deleteAll();
     }
-
-
 
     private Mono<MessageBoundary> generateOverCurrentWarning(String deviceId, String deviceType, float currentConsumption) {
         MessageBoundary overCurrentWarningMessage =
@@ -346,11 +314,5 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
                     device.setTotalActiveTime(device.getTotalActiveTime() + remainingTimeOnInHours);
                     return device;
                 });
-    }
-
-    private long calculateSleepTimeUntilMidnightInMilliseconds() {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime nextMidnight = now.toLocalDate().atTime(LocalTime.MIDNIGHT).plusDays(1);
-        return Duration.between(now, nextMidnight).toMillis();
     }
 }
