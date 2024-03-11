@@ -46,8 +46,9 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
     private float HOUSEHOLD_VOLTAGE;
 
 
-    public EnergyConsumptionServiceImp(@Lazy MessageQueueHandler messageHandler, DeviceDataRepository deviceDataRepository,
-                                        EnergyMonitoringRepository energyMonitoringRepository) {
+    public EnergyConsumptionServiceImp(DeviceDataRepository deviceDataRepository,
+                                       EnergyMonitoringRepository energyMonitoringRepository,
+                                       MessageQueueHandler messageHandler) {
         this.energyMonitoringRepository = energyMonitoringRepository;
         this.deviceDataRepository = deviceDataRepository;
         this.messageHandler = messageHandler;
@@ -66,27 +67,22 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
 
     @Override
     public Mono<Void> handleDeviceEvent(DeviceBoundary deviceEvent) {
-        return deviceDataRepository.findById(deviceEvent.getId())
+        return this.deviceDataRepository.findAllById(List.of(deviceEvent.getId()))
+                .defaultIfEmpty(new DeviceEntity())
                 .flatMap(device -> {
-                    // Device exists
-                    if (!device.getStatus().isOn()) {
-                        // device is off, calculate time, set new totalActiveTime, and lastUpdateTime to now
-                        float totalTimeOn = Duration.between(device.getLastUpdateTimestamp(),
+                    if (device.getId() == null || device.getId().isBlank()) { // new device
+                        device.setTotalActiveTime(0.0f);
+                    } else if (!deviceEvent.getStatus().isOn()) {
+                        // device switched off, calculate on time, set new totalActiveTime
+                        float timeSwitchedOn = Duration.between(device.getLastUpdateTimestamp(),
                                 deviceEvent.getLastUpdateTimestamp()).toHours();
-                        device.setTotalActiveTime(device.getTotalActiveTime() + totalTimeOn);
-                        device.setLastUpdateTimestamp(LocalDateTime.now());
+                        device.setTotalActiveTime(device.getTotalActiveTime() + timeSwitchedOn);
                     }
-                    // save the updated device data
-                    return deviceDataRepository.save(device);
+                    if (device.getStatus().isOn() != device.getStatus().isOn()) // device isOn status changed
+                        device.setLastUpdateTimestamp(LocalDateTime.now());
+                    return this.deviceDataRepository.save(device);
                 })
-                .switchIfEmpty(Mono.defer(() -> {
-                    // Device does not exist, set totalActiveTime to 0 and lastUpdateTime to now
-                    DeviceEntity deviceNotification = deviceEvent.toEntity();
-                    deviceNotification.setTotalActiveTime(0.0f);
-                    deviceNotification.setLastUpdateTimestamp(LocalDateTime.now());
-                    return deviceDataRepository.save(deviceNotification);
-                }))
-                .then(Mono.empty());
+                .then();
     }
 
     @Override
@@ -136,9 +132,8 @@ public class EnergyConsumptionServiceImp implements EnergyConsumptionService {
 
     @Override
     public void checkForOverConsumption() {
-        this.generateLiveSummary()
-                .flatMap(liveSummary -> {
-                    float consumptionInWatts = (float) liveSummary.getMessageDetails().getOrDefault("consumption", 0f);
+        this.calculateTotalLiveConsumption()
+                .flatMap(consumptionInWatts -> {
                     this.logger.debug("Checking for over-consumption: limit: "
                             + OVERCONSUMPTION_LIMIT
                             + " Usage: "

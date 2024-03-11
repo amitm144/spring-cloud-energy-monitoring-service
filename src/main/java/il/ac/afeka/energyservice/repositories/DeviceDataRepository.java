@@ -8,6 +8,4 @@ import java.time.LocalDateTime;
 
 public interface DeviceDataRepository extends ReactiveMongoRepository<DeviceEntity, String> {
     Flux<DeviceEntity> findAllByLastUpdateTimestampBetween(LocalDateTime start, LocalDateTime end);
-
-
 }

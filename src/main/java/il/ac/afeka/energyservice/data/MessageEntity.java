@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
 
-@Document(collection = "messages")
+@Document("monitoring_messages")
 public class MessageEntity {
     @Id
     private String messageId;
