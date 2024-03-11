@@ -10,12 +10,12 @@ public class StatusEntity {
 
 	public StatusEntity() {}
 
-	public boolean isOn() {
+	public boolean getIsOn() {
 		return isOn;
 	}
 
-	public void setIsOn(boolean on) {
-		isOn = on;
+	public void setIsOn(boolean isOn) {
+		this.isOn = isOn;
 	}
 
 	public int getBrightness() {

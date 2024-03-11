@@ -17,4 +17,9 @@ public interface EnergyConsumptionService {
     Flux<MessageBoundary> getOverCurrentWarnings();
     void checkForOverCurrent(DeviceBoundary deviceDetails);
     void checkForOverConsumption();
+    //for debugging purposes
+	Mono<DeviceBoundary> saveDevice(DeviceBoundary device);
+    Flux<DeviceBoundary> getAllDevices();
+    Mono<Void> deleteAllDevices();
+
 }

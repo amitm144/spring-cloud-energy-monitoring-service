@@ -22,7 +22,7 @@ public class StatusBoundary {
 	}
 
 	public StatusBoundary(StatusEntity statusEntity) {
-		this.isOn = statusEntity.isOn();
+		this.isOn = statusEntity.getIsOn();
 		this.brightness = statusEntity.getBrightness();
 		this.colorRGB = statusEntity.getColorRGB();
 		this.currentPowerInWatts = statusEntity.getCurrentPowerInWatts();
@@ -30,19 +30,19 @@ public class StatusBoundary {
 
 	public StatusEntity toEntity() {
 		StatusEntity rv = new StatusEntity();
-		rv.setIsOn(isOn());
-		rv.setBrightness(getBrightness());
-		rv.setColorRGB(getColorRGB());
-		rv.setCurrentPowerInWatts(getCurrentPowerInWatts());
+		rv.setIsOn(this.getIsOn());
+		rv.setBrightness(this.getBrightness());
+		rv.setColorRGB(this.getColorRGB());
+		rv.setCurrentPowerInWatts(this.getCurrentPowerInWatts());
 		return rv;
 	}
 
-	public boolean isOn() {
+	public boolean getIsOn() {
 		return isOn;
 	}
 
-	public void setIsOn(boolean on) {
-		isOn = on;
+	public void setIsOn(boolean isOn) {
+		this.isOn = isOn;
 	}
 
 	public int getBrightness() {

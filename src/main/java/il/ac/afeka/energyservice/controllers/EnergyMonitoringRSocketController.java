@@ -75,4 +75,20 @@ public class EnergyMonitoringRSocketController {
         this.logger.info("over-current warning report requested");
         return energyService.getOverCurrentWarnings();
     }
+
+    //for debugging purposes
+    @MessageMapping("${app.rsocket.event.device.save}")
+    public Mono<DeviceBoundary> saveDevice(DeviceBoundary device) {
+        return energyService.saveDevice(device);
+    }
+
+    @MessageMapping("${app.rsocket.event.device.getAll}")
+    public Flux<DeviceBoundary> getAllDevices() {
+        return energyService.getAllDevices();
+    }
+
+    @MessageMapping("${app.rsocket.event.device.deleteAll}")
+    public Mono<Void> deleteAllDevices() {
+        return energyService.deleteAllDevices();
+    }
 }

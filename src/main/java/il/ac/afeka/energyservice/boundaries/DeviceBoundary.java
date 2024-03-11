@@ -42,6 +42,7 @@ public class DeviceBoundary {
 		rv.setManufacturerPowerInWatts(this.getManufacturerPowerInWatts());
 		rv.setStatus(this.getStatus().toEntity());
 		rv.setAdditionalAttributes(this.getAdditionalAttributes());
+		rv.setTotalActiveTime(0.0f);
 		return rv;
 	}
 
