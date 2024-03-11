@@ -14,10 +14,11 @@ import org.springframework.cloud.stream.function.StreamBridge;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import java.util.function.Consumer;
 
-@Configuration
+@Component
 public class KafkaMessageHandler implements MessageQueueHandler {
 	private EnergyConsumptionService energyConsumptionService;
 	private final StreamBridge kafkaProducer;
@@ -51,9 +52,12 @@ public class KafkaMessageHandler implements MessageQueueHandler {
 						String deviceJson = jackson.writeValueAsString(message.getMessageDetails().get("device"));
 						DeviceBoundary deviceBoundary = jackson.readValue(deviceJson, DeviceBoundary.class);
 
-						this.energyConsumptionService.handleDeviceEvent(deviceBoundary);
-						this.energyConsumptionService.checkForOverCurrent(deviceBoundary);
-						this.energyConsumptionService.checkForOverConsumption();
+						this.energyConsumptionService.handleDeviceEvent(deviceBoundary)
+								.then(Mono.fromRunnable(() -> {
+									this.energyConsumptionService.checkForOverCurrent(deviceBoundary);
+									this.energyConsumptionService.checkForOverConsumption();
+								}))
+								.subscribe();
 				}
 			} catch (Exception e) {
 				this.logger.error(e.getMessage());
@@ -63,14 +67,15 @@ public class KafkaMessageHandler implements MessageQueueHandler {
 	}
 
 	public Mono<Void> publish(Object data) {
-		try {
-			this.jackson.writeValueAsString(data);
-			this.logger.debug("Publishing message: \n" + data);
-			this.kafkaProducer.send(this.targetTopic, data);
+		if (data != null)
+			try {
+				this.jackson.writeValueAsString(data);
+				this.logger.debug("Publishing message: \n" + data);
+				this.kafkaProducer.send(this.targetTopic, data);
 
-		} catch (JsonProcessingException e) {
-			this.logger.error(e.getMessage());
-		}
+			} catch (JsonProcessingException e) {
+				this.logger.error(e.getMessage());
+			}
 		return Mono.empty();
 	}
 }

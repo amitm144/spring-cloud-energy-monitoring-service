@@ -96,6 +96,13 @@ public class MessageBoundary {
 
     @Override
     public String toString() {
-        return "MessageBoundary [id=" + messageId + ", messageType=" + messageType + ", summary=" + summary + ", publishedTimestamp=" + publishedTimestamp + "]";
+        return "MessageBoundary{" +
+                "messageId='" + messageId + '\'' +
+                ", summary='" + summary + '\'' +
+                ", messageType='" + messageType + '\'' +
+                ", publishedTimestamp=" + publishedTimestamp +
+                ", externalReferences=" + externalReferences +
+                ", messageDetails=" + messageDetails +
+                '}';
     }
 }

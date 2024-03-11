@@ -6,7 +6,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
 import java.util.Map;
 
-@Document(collection = "devices")
+@Document("devices_monitoring")
 public class DeviceEntity {
 	@Id
 	private String id;
@@ -20,8 +20,22 @@ public class DeviceEntity {
 	private Map<String, Object> additionalAttributes;
 	private float totalActiveTime;
 
+	public DeviceEntity() {}
 
-	public DeviceEntity() {
+	public DeviceEntity(String id, String type, String subType, LocalDateTime registrationTimestamp,
+						LocalDateTime lastUpdateTimestamp, String location, float manufacturerPowerInWatts,
+						StatusEntity status, Map<String, Object> additionalAttributes, float totalActiveTime)
+	{
+		this.id = id;
+		this.type = type;
+		this.subType = subType;
+		this.registrationTimestamp = registrationTimestamp;
+		this.lastUpdateTimestamp = lastUpdateTimestamp;
+		this.location = location;
+		this.manufacturerPowerInWatts = manufacturerPowerInWatts;
+		this.status = status;
+		this.additionalAttributes = additionalAttributes;
+		this.totalActiveTime = totalActiveTime;
 	}
 
 	public String getId() {
