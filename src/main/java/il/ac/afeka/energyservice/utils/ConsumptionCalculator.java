@@ -18,7 +18,6 @@ public class ConsumptionCalculator {
 
     public static Mono<Float> calculateTotalConsumption(Flux<DeviceEntity> devices) {
         return devices
-                .filter(device -> device.getStatus().getIsOn())
                 .map(device -> device.getStatus().getCurrentPowerInWatts() * device.getTotalActiveTime())
                 .reduce(0.0f, Float::sum);
     }
